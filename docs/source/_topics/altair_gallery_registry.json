@@ -1,0 +1,3122 @@
+{
+  "schema_version": 1,
+  "registry_date": "2026-11-11",
+  "source": {
+    "gallery": "https://altair-viz.github.io/gallery/index.html",
+    "manifest": "https://github.com/vega/altair/blob/main/_data/examples.json",
+    "manifest_blob": "130022d1ad70537f1be96a7e5374818224904b99",
+    "native_backend": "https://github.com/marcusinthesky/vl-convert/tree/feature/experimental-pgfplots-export"
+  },
+  "policy": {
+    "excluded": "Geographic/map intent, or interaction intrinsic to the displayed chart; static optional interaction is otherwise noted.",
+    "native_family_candidate": "Native Cartesian primitive family appears available, after inline data conversion and normalization; no exact-example end-to-end verification.",
+    "preprocessing_or_adapter": "Plot can plausibly be expressed in current native marks, but original data transforms, encodings, or configuration require rewriting or preprocessing.",
+    "compiler_gap": "Current backend lacks a required semantic mark/layout/style feature; cannot claim like-for-like support.",
+    "verified": "Reserved for passing original-spec normalization, native conversion, successful LaTeX compilation, and reviewed numerical/visual parity; none currently qualified."
+  },
+  "examples": [
+    {
+      "id": "airport_connections",
+      "title": "Connections Among U.S. Airports Interactive",
+      "url": "https://altair-viz.github.io/gallery/airport_connections.html",
+      "source_path": "tests/examples_arguments_syntax/airport_connections.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "andrews_curves",
+      "title": "Andrews Curves",
+      "url": "https://altair-viz.github.io/gallery/andrews_curves.html",
+      "source_path": "tests/examples_arguments_syntax/andrews_curves.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "annual_weather_heatmap",
+      "title": "Annual Weather Heatmap",
+      "url": "https://altair-viz.github.io/gallery/annual_weather_heatmap.html",
+      "source_path": "tests/examples_arguments_syntax/annual_weather_heatmap.py",
+      "categories": [
+        "tables"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "anscombe_plot",
+      "title": "Anscombe's Quartet",
+      "url": "https://altair-viz.github.io/gallery/anscombe_plot.html",
+      "source_path": "tests/examples_arguments_syntax/anscombe_plot.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "area_chart_gradient",
+      "title": "Area Chart with Gradient",
+      "url": "https://altair-viz.github.io/gallery/area_chart_gradient.html",
+      "source_path": "tests/examples_arguments_syntax/area_chart_gradient.py",
+      "categories": [
+        "area charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "gradient fills",
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "area_faceted",
+      "title": "Faceted Area Chart",
+      "url": "https://altair-viz.github.io/gallery/area_faceted.html",
+      "source_path": "tests/examples_arguments_syntax/area_faceted.py",
+      "categories": [
+        "area charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_and_line_with_dual_axis",
+      "title": "Bar Chart with Line on Dual Axis",
+      "url": "https://altair-viz.github.io/gallery/bar_and_line_with_dual_axis.html",
+      "source_path": "tests/examples_arguments_syntax/bar_and_line_with_dual_axis.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "independent dual-axis layers",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_faceted_compact",
+      "title": "Compact Faceted Grid of Bar Charts",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_faceted_compact.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_faceted_compact.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_horizontal",
+      "title": "Horizontal Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_horizontal.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_horizontal.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_sorted",
+      "title": "Sorted Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_sorted.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_sorted.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_highlighted_bar",
+      "title": "Bar Chart with Highlighted Bar",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_highlighted_bar.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_highlighted_bar.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_highlighted_segment",
+      "title": "Bar Chart with Highlighted Segment",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_highlighted_segment.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_highlighted_segment.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_labels",
+      "title": "Bar Chart with Labels",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_labels.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_labels.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_labels_measured_luminance",
+      "title": "Bar Chart with Labels based on Measured Luminance",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_labels_measured_luminance.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_labels_measured_luminance.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "expression-driven text color",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_mean_line",
+      "title": "Bar Chart with Line at Mean",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_mean_line.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_mean_line.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_negatives",
+      "title": "Bar Chart with Negative Values",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_negatives.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_negatives.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_range",
+      "title": "Bar Chart with Range",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_range.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_range.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_chart_with_single_threshold",
+      "title": "Bar Chart Highlighting Values beyond a Threshold",
+      "url": "https://altair-viz.github.io/gallery/bar_chart_with_single_threshold.html",
+      "source_path": "tests/examples_arguments_syntax/bar_chart_with_single_threshold.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_faceted_stacked",
+      "title": "Faceted Stacked Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/bar_faceted_stacked.html",
+      "source_path": "tests/examples_arguments_syntax/bar_faceted_stacked.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_rounded",
+      "title": "Bar Chart with Rounded Edges",
+      "url": "https://altair-viz.github.io/gallery/bar_rounded.html",
+      "source_path": "tests/examples_arguments_syntax/bar_rounded.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "rounded bar corners",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bar_with_rolling_mean",
+      "title": "Bar Chart with Rolling Mean",
+      "url": "https://altair-viz.github.io/gallery/bar_with_rolling_mean.html",
+      "source_path": "tests/examples_arguments_syntax/bar_with_rolling_mean.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "beckers_barley_facet",
+      "title": "Becker's Barley Faceted Plot",
+      "url": "https://altair-viz.github.io/gallery/beckers_barley_facet.html",
+      "source_path": "tests/examples_arguments_syntax/beckers_barley_facet.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "beckers_barley_wrapped_facet",
+      "title": "Becker's Barley Wrapped Facet Plot",
+      "url": "https://altair-viz.github.io/gallery/beckers_barley_wrapped_facet.html",
+      "source_path": "tests/examples_arguments_syntax/beckers_barley_wrapped_facet.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "boxplot",
+      "title": "Boxplot with Min/Max Whiskers",
+      "url": "https://altair-viz.github.io/gallery/boxplot.html",
+      "source_path": "tests/examples_arguments_syntax/boxplot.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "min-max whisker semantics differ from default",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bubble_plot",
+      "title": "Bubble Plot",
+      "url": "https://altair-viz.github.io/gallery/bubble_plot.html",
+      "source_path": "tests/examples_arguments_syntax/bubble_plot.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "variable symbol sizes require review",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "bump_chart",
+      "title": "Bump Chart",
+      "url": "https://altair-viz.github.io/gallery/bump_chart.html",
+      "source_path": "tests/examples_arguments_syntax/bump_chart.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "calculate_residuals",
+      "title": "Calculate Residuals",
+      "url": "https://altair-viz.github.io/gallery/calculate_residuals.html",
+      "source_path": "tests/examples_arguments_syntax/calculate_residuals.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:joinaggregate, transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "candlestick_chart",
+      "title": "Candlestick Chart",
+      "url": "https://altair-viz.github.io/gallery/candlestick_chart.html",
+      "source_path": "tests/examples_arguments_syntax/candlestick_chart.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "choropleth",
+      "title": "Choropleth Map",
+      "url": "https://altair-viz.github.io/gallery/choropleth.html",
+      "source_path": "tests/examples_arguments_syntax/choropleth.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "choropleth_repeat",
+      "title": "Repeated Choropleth Map",
+      "url": "https://altair-viz.github.io/gallery/choropleth_repeat.html",
+      "source_path": "tests/examples_arguments_syntax/choropleth_repeat.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "co2_concentration",
+      "title": "Atmospheric CO2 Concentration",
+      "url": "https://altair-viz.github.io/gallery/co2_concentration.html",
+      "source_path": "tests/examples_arguments_syntax/co2_concentration.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "comet_chart",
+      "title": "Comet Chart",
+      "url": "https://altair-viz.github.io/gallery/comet_chart.html",
+      "source_path": "tests/examples_arguments_syntax/comet_chart.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:trail",
+        "unimplemented transform semantics: transform:calculate, transform:pivot",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "cumulative_count_chart",
+      "title": "Cumulative Count Chart",
+      "url": "https://altair-viz.github.io/gallery/cumulative_count_chart.html",
+      "source_path": "tests/examples_arguments_syntax/cumulative_count_chart.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "dendrogram",
+      "title": "Dendrogram of Hierarchical Clustering",
+      "url": "https://altair-viz.github.io/gallery/dendrogram.html",
+      "source_path": "tests/examples_arguments_syntax/dendrogram.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "density_repeat",
+      "title": "Repeated Density Estimates",
+      "url": "https://altair-viz.github.io/gallery/density_repeat.html",
+      "source_path": "tests/examples_arguments_syntax/density_repeat.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:density",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "density_stack",
+      "title": "Stacked Density Estimates",
+      "url": "https://altair-viz.github.io/gallery/density_stack.html",
+      "source_path": "tests/examples_arguments_syntax/density_stack.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:density",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "deviation_ellipses",
+      "title": "Confidence Interval Ellipses",
+      "url": "https://altair-viz.github.io/gallery/deviation_ellipses.html",
+      "source_path": "tests/examples_arguments_syntax/deviation_ellipses.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "custom ellipse geometry",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "distributions_and_medians_of_likert_scale_ratings",
+      "title": "Distributions and Medians of Likert Scale Ratings",
+      "url": "https://altair-viz.github.io/gallery/distributions_and_medians_of_likert_scale_ratings.html",
+      "source_path": "tests/examples_arguments_syntax/distributions_and_medians_of_likert_scale_ratings.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:tick"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "distributions_faceted_histogram",
+      "title": "Faceted Histogram",
+      "url": "https://altair-viz.github.io/gallery/distributions_faceted_histogram.html",
+      "source_path": "tests/examples_arguments_syntax/distributions_faceted_histogram.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "diverging_stacked_bar_chart",
+      "title": "Diverging Stacked Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/diverging_stacked_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/diverging_stacked_bar_chart.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "donut_chart",
+      "title": "Donut Chart",
+      "url": "https://altair-viz.github.io/gallery/donut_chart.html",
+      "source_path": "tests/examples_arguments_syntax/donut_chart.py",
+      "categories": [
+        "circular plots"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:arc"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "dot_dash_plot",
+      "title": "Dot Dash Plot",
+      "url": "https://altair-viz.github.io/gallery/dot_dash_plot.html",
+      "source_path": "tests/examples_arguments_syntax/dot_dash_plot.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "empirical_cumulative_distribution_function",
+      "title": "Empirical Cumulative Distribution Function",
+      "url": "https://altair-viz.github.io/gallery/empirical_cumulative_distribution_function.html",
+      "source_path": "tests/examples_arguments_syntax/empirical_cumulative_distribution_function.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "errorbars_with_ci",
+      "title": "Error Bars with Confidence Interval",
+      "url": "https://altair-viz.github.io/gallery/errorbars_with_ci.html",
+      "source_path": "tests/examples_arguments_syntax/errorbars_with_ci.py",
+      "categories": [
+        "uncertainties and trends"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "bootstrap confidence interval must be precomputed",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "errorbars_with_std",
+      "title": "Error Bars with Standard Deviation",
+      "url": "https://altair-viz.github.io/gallery/errorbars_with_std.html",
+      "source_path": "tests/examples_arguments_syntax/errorbars_with_std.py",
+      "categories": [
+        "uncertainties and trends"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "falkensee",
+      "title": "Population of Falkensee from 1875 to 2014",
+      "url": "https://altair-viz.github.io/gallery/falkensee.html",
+      "source_path": "tests/examples_arguments_syntax/falkensee.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "filled_step_chart",
+      "title": "Filled Step Chart",
+      "url": "https://altair-viz.github.io/gallery/filled_step_chart.html",
+      "source_path": "tests/examples_arguments_syntax/filled_step_chart.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "gantt_chart",
+      "title": "Gantt Chart",
+      "url": "https://altair-viz.github.io/gallery/gantt_chart.html",
+      "source_path": "tests/examples_arguments_syntax/gantt_chart.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "gapminder_bubble_plot",
+      "title": "Gapminder Bubble Plot",
+      "url": "https://altair-viz.github.io/gallery/gapminder_bubble_plot.html",
+      "source_path": "tests/examples_arguments_syntax/gapminder_bubble_plot.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "groupby-map",
+      "title": "Grouped Points with Proportional Symbols Map",
+      "url": "https://altair-viz.github.io/gallery/groupby-map.html",
+      "source_path": "tests/examples_arguments_syntax/groupby-map.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "grouped_bar_chart",
+      "title": "Grouped Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/grouped_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/grouped_bar_chart.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "grouped_bar_chart2",
+      "title": "Grouped Bar Chart with xOffset",
+      "url": "https://altair-viz.github.io/gallery/grouped_bar_chart2.html",
+      "source_path": "tests/examples_arguments_syntax/grouped_bar_chart2.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "grouped_bar_chart_horizontal",
+      "title": "Horizontal Grouped Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/grouped_bar_chart_horizontal.html",
+      "source_path": "tests/examples_arguments_syntax/grouped_bar_chart_horizontal.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "grouped_bar_chart_overlapping_bars",
+      "title": "Grouped Bar Chart with xOffset and overlapping bars",
+      "url": "https://altair-viz.github.io/gallery/grouped_bar_chart_overlapping_bars.html",
+      "source_path": "tests/examples_arguments_syntax/grouped_bar_chart_overlapping_bars.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "grouped_bar_chart_with_error_bars",
+      "title": "Grouped Bar Chart with Error Bars",
+      "url": "https://altair-viz.github.io/gallery/grouped_bar_chart_with_error_bars.html",
+      "source_path": "tests/examples_arguments_syntax/grouped_bar_chart_with_error_bars.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "heat_lane",
+      "title": "Heat Lane Chart",
+      "url": "https://altair-viz.github.io/gallery/heat_lane.html",
+      "source_path": "tests/examples_arguments_syntax/heat_lane.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:joinaggregate",
+        "bins may need explicit step/extent",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "hexbins",
+      "title": "Hexbin Chart",
+      "url": "https://altair-viz.github.io/gallery/hexbins.html",
+      "source_path": "tests/examples_arguments_syntax/hexbins.py",
+      "categories": [
+        "tables"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "custom hexagonal path symbols",
+        "unimplemented transform semantics: transform:calculate",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "histogram_gradient_color",
+      "title": "Histogram with Gradient Color",
+      "url": "https://altair-viz.github.io/gallery/histogram_gradient_color.html",
+      "source_path": "tests/examples_arguments_syntax/histogram_gradient_color.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "gradient fills",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "histogram_heatmap",
+      "title": "2D Histogram Heatmap",
+      "url": "https://altair-viz.github.io/gallery/histogram_heatmap.html",
+      "source_path": "tests/examples_arguments_syntax/histogram_heatmap.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "histogram_responsive",
+      "title": "Histogram with Responsive Bins",
+      "url": "https://altair-viz.github.io/gallery/histogram_responsive.html",
+      "source_path": "tests/examples_arguments_syntax/histogram_responsive.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "histogram_scatterplot",
+      "title": "2D Histogram Scatter Plot",
+      "url": "https://altair-viz.github.io/gallery/histogram_scatterplot.html",
+      "source_path": "tests/examples_arguments_syntax/histogram_scatterplot.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "histogram_with_a_global_mean_overlay",
+      "title": "Histogram with a Global Mean Overlay",
+      "url": "https://altair-viz.github.io/gallery/histogram_with_a_global_mean_overlay.html",
+      "source_path": "tests/examples_arguments_syntax/histogram_with_a_global_mean_overlay.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "horizon_graph",
+      "title": "Horizon Graph",
+      "url": "https://altair-viz.github.io/gallery/horizon_graph.html",
+      "source_path": "tests/examples_arguments_syntax/horizon_graph.py",
+      "categories": [
+        "area charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "overlapping clipped area bands",
+        "unimplemented transform semantics: transform:calculate"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "horizontal_stacked_bar_chart",
+      "title": "Horizontal Stacked Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/horizontal_stacked_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/horizontal_stacked_bar_chart.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_aggregation",
+      "title": "Interactive Chart with Aggregation",
+      "url": "https://altair-viz.github.io/gallery/interactive_aggregation.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_aggregation.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_bar_select_highlight",
+      "title": "Bar Chart with Highlighting on Hover and Selection on Click",
+      "url": "https://altair-viz.github.io/gallery/interactive_bar_select_highlight.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_bar_select_highlight.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_bin_size",
+      "title": "Histogram with Adjustable Bin Size",
+      "url": "https://altair-viz.github.io/gallery/interactive_bin_size.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_bin_size.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_brush",
+      "title": "Interactive Rectangular Brush",
+      "url": "https://altair-viz.github.io/gallery/interactive_brush.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_brush.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_column_selection",
+      "title": "Interactive Selection of Columns",
+      "url": "https://altair-viz.github.io/gallery/interactive_column_selection.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_column_selection.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_cross_highlight",
+      "title": "Interactive Chart with Cross-Highlight",
+      "url": "https://altair-viz.github.io/gallery/interactive_cross_highlight.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_cross_highlight.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_date_input",
+      "title": "Filter a Time Series with Date and Number Inputs",
+      "url": "https://altair-viz.github.io/gallery/interactive_date_input.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_date_input.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_layered_crossfilter",
+      "title": "Interactive Crossfilter",
+      "url": "https://altair-viz.github.io/gallery/interactive_layered_crossfilter.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_layered_crossfilter.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_legend",
+      "title": "Interactive Legend",
+      "url": "https://altair-viz.github.io/gallery/interactive_legend.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_legend.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_reorder_stacked_bars",
+      "title": "Reorder stacked bar segments",
+      "url": "https://altair-viz.github.io/gallery/interactive_reorder_stacked_bars.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_reorder_stacked_bars.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interactive_scatter_plot",
+      "title": "Simple Interactive Colored Scatter Plot",
+      "url": "https://altair-viz.github.io/gallery/interactive_scatter_plot.html",
+      "source_path": "tests/examples_arguments_syntax/interactive_scatter_plot.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interval_selection",
+      "title": "Interval Selection with Initial Date Range",
+      "url": "https://altair-viz.github.io/gallery/interval_selection.html",
+      "source_path": "tests/examples_arguments_syntax/interval_selection.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "interval_selection_map_quakes",
+      "title": "Interval Selection on a Map",
+      "url": "https://altair-viz.github.io/gallery/interval_selection_map_quakes.html",
+      "source_path": "tests/examples_arguments_syntax/interval_selection_map_quakes.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "iowa_electricity",
+      "title": "Iowa's Renewable Energy Boom",
+      "url": "https://altair-viz.github.io/gallery/iowa_electricity.html",
+      "source_path": "tests/examples_arguments_syntax/iowa_electricity.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "isotype",
+      "title": "Isotype Visualization",
+      "url": "https://altair-viz.github.io/gallery/isotype.html",
+      "source_path": "tests/examples_arguments_syntax/isotype.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "isotype_emoji",
+      "title": "Isotype Visualization with Emoji",
+      "url": "https://altair-viz.github.io/gallery/isotype_emoji.html",
+      "source_path": "tests/examples_arguments_syntax/isotype_emoji.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:window"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "isotype_grid",
+      "title": "Isotype Grid",
+      "url": "https://altair-viz.github.io/gallery/isotype_grid.html",
+      "source_path": "tests/examples_arguments_syntax/isotype_grid.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "lasagna_plot",
+      "title": "Lasagna Plot (Dense Time-Series Heatmap)",
+      "url": "https://altair-viz.github.io/gallery/lasagna_plot.html",
+      "source_path": "tests/examples_arguments_syntax/lasagna_plot.py",
+      "categories": [
+        "tables"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "layer_line_color_rule",
+      "title": "Line Chart with Layered Aggregates",
+      "url": "https://altair-viz.github.io/gallery/layer_line_color_rule.html",
+      "source_path": "tests/examples_arguments_syntax/layer_line_color_rule.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "layered_area_chart",
+      "title": "Layered Area Chart",
+      "url": "https://altair-viz.github.io/gallery/layered_area_chart.html",
+      "source_path": "tests/examples_arguments_syntax/layered_area_chart.py",
+      "categories": [
+        "area charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "layered_bar_chart",
+      "title": "Layered Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/layered_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/layered_bar_chart.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "layered_chart_bar_mark",
+      "title": "Bar and Tick Chart",
+      "url": "https://altair-viz.github.io/gallery/layered_chart_bar_mark.html",
+      "source_path": "tests/examples_arguments_syntax/layered_chart_bar_mark.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:tick"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "layered_chart_with_dual_axis",
+      "title": "Layered chart with Dual-Axis",
+      "url": "https://altair-viz.github.io/gallery/layered_chart_with_dual_axis.html",
+      "source_path": "tests/examples_arguments_syntax/layered_chart_with_dual_axis.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "independent dual-axis layers",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "layered_heatmap_text",
+      "title": "Text over a Heatmap",
+      "url": "https://altair-viz.github.io/gallery/layered_heatmap_text.html",
+      "source_path": "tests/examples_arguments_syntax/layered_heatmap_text.py",
+      "categories": [
+        "tables"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "layered_histogram",
+      "title": "Layered Histogram",
+      "url": "https://altair-viz.github.io/gallery/layered_histogram.html",
+      "source_path": "tests/examples_arguments_syntax/layered_histogram.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_arrows",
+      "title": "Line Chart with Arrows",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_arrows.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_arrows.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "arrowhead point shapes"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_color_datum",
+      "title": "Line Chart with Datum for Color",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_color_datum.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_color_datum.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_cumsum",
+      "title": "Line Chart with Cumulative Sum",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_cumsum.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_cumsum.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_cumsum_faceted",
+      "title": "Faceted Line Chart with Cumulative Sum",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_cumsum_faceted.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_cumsum_faceted.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_custom_legend",
+      "title": "Line Chart with Custom Legend",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_custom_legend.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_custom_legend.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "custom legend layout",
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_datum",
+      "title": "Line Chart with Datum",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_datum.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_datum.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_generator",
+      "title": "Line Chart with Sequence Generator",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_generator.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_generator.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_interpolation",
+      "title": "Line Chart with Interpolation",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_interpolation.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_interpolation.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "monotone interpolation",
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_points",
+      "title": "Line Chart with Point Markers",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_points.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_points.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_chart_with_points_stroked",
+      "title": "Line Chart with Stroked Point Markers",
+      "url": "https://altair-viz.github.io/gallery/line_chart_with_points_stroked.html",
+      "source_path": "tests/examples_arguments_syntax/line_chart_with_points_stroked.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "non-default outlined point markers",
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_custom_order",
+      "title": "Line Chart with Custom Order",
+      "url": "https://altair-viz.github.io/gallery/line_custom_order.html",
+      "source_path": "tests/examples_arguments_syntax/line_custom_order.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_percent",
+      "title": "Line Chart with Percent axis",
+      "url": "https://altair-viz.github.io/gallery/line_percent.html",
+      "source_path": "tests/examples_arguments_syntax/line_percent.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_with_ci",
+      "title": "Line Chart with Confidence Interval Band",
+      "url": "https://altair-viz.github.io/gallery/line_with_ci.html",
+      "source_path": "tests/examples_arguments_syntax/line_with_ci.py",
+      "categories": [
+        "uncertainties and trends"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "bootstrap confidence interval must be precomputed",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_with_last_value_labeled",
+      "title": "Line Chart with Last Value Labeled",
+      "url": "https://altair-viz.github.io/gallery/line_with_last_value_labeled.html",
+      "source_path": "tests/examples_arguments_syntax/line_with_last_value_labeled.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "line_with_log_scale",
+      "title": "Line Chart with Logarithmic Scale",
+      "url": "https://altair-viz.github.io/gallery/line_with_log_scale.html",
+      "source_path": "tests/examples_arguments_syntax/line_with_log_scale.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "london_tube",
+      "title": "London Tube Lines",
+      "url": "https://altair-viz.github.io/gallery/london_tube.html",
+      "source_path": "tests/examples_arguments_syntax/london_tube.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "maps_faceted_species",
+      "title": "Faceted County-Level Choropleth Maps",
+      "url": "https://altair-viz.github.io/gallery/maps_faceted_species.html",
+      "source_path": "tests/examples_arguments_syntax/maps_faceted_species.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "mosaic_with_labels",
+      "title": "Mosaic Chart with Labels",
+      "url": "https://altair-viz.github.io/gallery/mosaic_with_labels.html",
+      "source_path": "tests/examples_arguments_syntax/mosaic_with_labels.py",
+      "categories": [
+        "tables"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "mosaic layout and shared coordinates",
+        "unimplemented transform semantics: transform:calculate, transform:stack, transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "multi_series_line",
+      "title": "Multiple Series Line Chart",
+      "url": "https://altair-viz.github.io/gallery/multi_series_line.html",
+      "source_path": "tests/examples_arguments_syntax/multi_series_line.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "multifeature_scatter_plot",
+      "title": "Multifeature Scatter Plot",
+      "url": "https://altair-viz.github.io/gallery/multifeature_scatter_plot.html",
+      "source_path": "tests/examples_arguments_syntax/multifeature_scatter_plot.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "multiline_highlight",
+      "title": "Multi-Line Highlight",
+      "url": "https://altair-viz.github.io/gallery/multiline_highlight.html",
+      "source_path": "tests/examples_arguments_syntax/multiline_highlight.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "multiline_tooltip",
+      "title": "Multi-Line Tooltip",
+      "url": "https://altair-viz.github.io/gallery/multiline_tooltip.html",
+      "source_path": "tests/examples_arguments_syntax/multiline_tooltip.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "multiline_tooltip_standard",
+      "title": "Multi-Line Tooltip (Standard)",
+      "url": "https://altair-viz.github.io/gallery/multiline_tooltip_standard.html",
+      "source_path": "tests/examples_arguments_syntax/multiline_tooltip_standard.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "multiple_interactions",
+      "title": "Multiple Interactions",
+      "url": "https://altair-viz.github.io/gallery/multiple_interactions.html",
+      "source_path": "tests/examples_arguments_syntax/multiple_interactions.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "natural_disasters",
+      "title": "Global Deaths from Natural Disasters",
+      "url": "https://altair-viz.github.io/gallery/natural_disasters.html",
+      "source_path": "tests/examples_arguments_syntax/natural_disasters.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "normalized_stacked_area_chart",
+      "title": "Normalized Stacked Area Chart",
+      "url": "https://altair-viz.github.io/gallery/normalized_stacked_area_chart.html",
+      "source_path": "tests/examples_arguments_syntax/normalized_stacked_area_chart.py",
+      "categories": [
+        "area charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "normalized_stacked_bar_chart",
+      "title": "Normalized Stacked Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/normalized_stacked_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/normalized_stacked_bar_chart.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "normed_parallel_coordinates",
+      "title": "Normalized Parallel Coordinates",
+      "url": "https://altair-viz.github.io/gallery/normed_parallel_coordinates.html",
+      "source_path": "tests/examples_arguments_syntax/normed_parallel_coordinates.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:joinaggregate, transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "one_dot_per_zipcode",
+      "title": "One Dot Per Zipcode",
+      "url": "https://altair-viz.github.io/gallery/one_dot_per_zipcode.html",
+      "source_path": "tests/examples_arguments_syntax/one_dot_per_zipcode.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "pacman_chart",
+      "title": "Pacman Chart",
+      "url": "https://altair-viz.github.io/gallery/pacman_chart.html",
+      "source_path": "tests/examples_arguments_syntax/pacman_chart.py",
+      "categories": [
+        "circular plots"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:arc"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "parallel_coordinates",
+      "title": "Parallel Coordinates",
+      "url": "https://altair-viz.github.io/gallery/parallel_coordinates.html",
+      "source_path": "tests/examples_arguments_syntax/parallel_coordinates.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "percentage_of_total",
+      "title": "Calculating Percentage of Total",
+      "url": "https://altair-viz.github.io/gallery/percentage_of_total.html",
+      "source_path": "tests/examples_arguments_syntax/percentage_of_total.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:joinaggregate"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "pie_chart",
+      "title": "Pie Chart",
+      "url": "https://altair-viz.github.io/gallery/pie_chart.html",
+      "source_path": "tests/examples_arguments_syntax/pie_chart.py",
+      "categories": [
+        "circular plots"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:arc"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "pie_chart_with_labels",
+      "title": "Pie Chart with Labels",
+      "url": "https://altair-viz.github.io/gallery/pie_chart_with_labels.html",
+      "source_path": "tests/examples_arguments_syntax/pie_chart_with_labels.py",
+      "categories": [
+        "circular plots"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:arc"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "point_map",
+      "title": "Point map",
+      "url": "https://altair-viz.github.io/gallery/point_map.html",
+      "source_path": "tests/examples_arguments_syntax/point_map.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "polar_bar_chart",
+      "title": "Polar Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/polar_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/polar_bar_chart.py",
+      "categories": [
+        "circular plots"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:arc"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "poly_fit_regression",
+      "title": "Polynomial Fit Plot with Regression Transform",
+      "url": "https://altair-viz.github.io/gallery/poly_fit_regression.html",
+      "source_path": "tests/examples_arguments_syntax/poly_fit_regression.py",
+      "categories": [
+        "uncertainties and trends"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:regression"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "pyramid",
+      "title": "Pyramid Pie Chart",
+      "url": "https://altair-viz.github.io/gallery/pyramid.html",
+      "source_path": "tests/examples_arguments_syntax/pyramid.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:arc",
+        "non-Cartesian pie geometry"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "radial_chart",
+      "title": "Radial Chart",
+      "url": "https://altair-viz.github.io/gallery/radial_chart.html",
+      "source_path": "tests/examples_arguments_syntax/radial_chart.py",
+      "categories": [
+        "circular plots"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:arc"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "ranged_dot_plot",
+      "title": "Ranged Dot Plot",
+      "url": "https://altair-viz.github.io/gallery/ranged_dot_plot.html",
+      "source_path": "tests/examples_arguments_syntax/ranged_dot_plot.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "optional interactivity must be stripped",
+        "sample dataset must be materialized as inline data",
+        "strip optional pan/zoom"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "ridgeline_plot",
+      "title": "Ridgeline plot",
+      "url": "https://altair-viz.github.io/gallery/ridgeline_plot.html",
+      "source_path": "tests/examples_arguments_syntax/ridgeline_plot.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "density and vertical offsets",
+        "unimplemented transform semantics: transform:impute, transform:joinaggregate, transform:timeunit",
+        "bins may need explicit step/extent",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_faceted",
+      "title": "Faceted Scatter Plot",
+      "url": "https://altair-viz.github.io/gallery/scatter_faceted.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_faceted.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_href",
+      "title": "Scatter Plot with Href",
+      "url": "https://altair-viz.github.io/gallery/scatter_href.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_href.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_linked_brush",
+      "title": "Multi-panel Scatter Plot with Linked Brushing",
+      "url": "https://altair-viz.github.io/gallery/scatter_linked_brush.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_linked_brush.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_linked_table",
+      "title": "Brushing Scatter Plot to Show Data on a Table",
+      "url": "https://altair-viz.github.io/gallery/scatter_linked_table.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_linked_table.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_marginal_hist",
+      "title": "Scatter Plot with Faceted Marginal Histograms",
+      "url": "https://altair-viz.github.io/gallery/scatter_marginal_hist.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_marginal_hist.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "multiple coordinate-aligned axes",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_matrix",
+      "title": "Scatter Matrix",
+      "url": "https://altair-viz.github.io/gallery/scatter_matrix.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_matrix.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "optional interactivity must be stripped",
+        "sample dataset must be materialized as inline data",
+        "strip optional pan/zoom"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_point_paths_hover",
+      "title": "Scatter plot with point paths on hover and search box",
+      "url": "https://altair-viz.github.io/gallery/scatter_point_paths_hover.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_point_paths_hover.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_qq",
+      "title": "Quantile-Quantile Plot",
+      "url": "https://altair-viz.github.io/gallery/scatter_qq.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_qq.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "quantile calculation",
+        "unimplemented transform semantics: transform:calculate, transform:quantile",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_tooltips",
+      "title": "Simple Scatter Plot with Tooltips",
+      "url": "https://altair-viz.github.io/gallery/scatter_tooltips.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_tooltips.py",
+      "categories": [
+        "simple charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_with_histogram",
+      "title": "Scatter Plot and Histogram with Interval Selection",
+      "url": "https://altair-viz.github.io/gallery/scatter_with_histogram.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_with_histogram.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_with_labels",
+      "title": "Simple Scatter Plot with Labels",
+      "url": "https://altair-viz.github.io/gallery/scatter_with_labels.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_with_labels.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_with_layered_histogram",
+      "title": "Interactive Scatter Plot and Linked Layered Histogram",
+      "url": "https://altair-viz.github.io/gallery/scatter_with_layered_histogram.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_with_layered_histogram.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_with_loess",
+      "title": "Scatter Plot with LOESS Lines",
+      "url": "https://altair-viz.github.io/gallery/scatter_with_loess.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_with_loess.py",
+      "categories": [
+        "uncertainties and trends"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:loess"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_with_minimap",
+      "title": "Scatter Plot with Minimap",
+      "url": "https://altair-viz.github.io/gallery/scatter_with_minimap.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_with_minimap.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_with_rolling_mean",
+      "title": "Scatter Plot with Rolling Mean",
+      "url": "https://altair-viz.github.io/gallery/scatter_with_rolling_mean.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_with_rolling_mean.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window, transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "scatter_with_shaded_area",
+      "title": "Scatter Plot with Shaded Area",
+      "url": "https://altair-viz.github.io/gallery/scatter_with_shaded_area.html",
+      "source_path": "tests/examples_arguments_syntax/scatter_with_shaded_area.py",
+      "categories": [
+        "scatter plots"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "seattle_weather_interactive",
+      "title": "Seattle Weather Interactive",
+      "url": "https://altair-viz.github.io/gallery/seattle_weather_interactive.html",
+      "source_path": "tests/examples_arguments_syntax/seattle_weather_interactive.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "select_detail",
+      "title": "Selection Detail",
+      "url": "https://altair-viz.github.io/gallery/select_detail.html",
+      "source_path": "tests/examples_arguments_syntax/select_detail.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "select_mark_area",
+      "title": "Using Selection Interval with mark_area",
+      "url": "https://altair-viz.github.io/gallery/select_mark_area.html",
+      "source_path": "tests/examples_arguments_syntax/select_mark_area.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "selection_histogram",
+      "title": "Selection Histogram",
+      "url": "https://altair-viz.github.io/gallery/selection_histogram.html",
+      "source_path": "tests/examples_arguments_syntax/selection_histogram.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "selection_layer_bar_month",
+      "title": "Interactive Average",
+      "url": "https://altair-viz.github.io/gallery/selection_layer_bar_month.html",
+      "source_path": "tests/examples_arguments_syntax/selection_layer_bar_month.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "selection_zorder",
+      "title": "Selection zorder",
+      "url": "https://altair-viz.github.io/gallery/selection_zorder.html",
+      "source_path": "tests/examples_arguments_syntax/selection_zorder.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "simple_bar_chart",
+      "title": "Simple Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/simple_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/simple_bar_chart.py",
+      "categories": [
+        "simple charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "simple_heatmap",
+      "title": "Simple Heatmap",
+      "url": "https://altair-viz.github.io/gallery/simple_heatmap.html",
+      "source_path": "tests/examples_arguments_syntax/simple_heatmap.py",
+      "categories": [
+        "simple charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "rect sizes/color encoding need spec verification"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "simple_histogram",
+      "title": "Simple Histogram",
+      "url": "https://altair-viz.github.io/gallery/simple_histogram.html",
+      "source_path": "tests/examples_arguments_syntax/simple_histogram.py",
+      "categories": [
+        "simple charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "simple_line_chart",
+      "title": "Simple Line Chart",
+      "url": "https://altair-viz.github.io/gallery/simple_line_chart.html",
+      "source_path": "tests/examples_arguments_syntax/simple_line_chart.py",
+      "categories": [
+        "simple charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "matches documented native Cartesian plot family; exact example not run"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "simple_scatter_with_errorbars",
+      "title": "Simple Scatter Plot with Errorbars",
+      "url": "https://altair-viz.github.io/gallery/simple_scatter_with_errorbars.html",
+      "source_path": "tests/examples_arguments_syntax/simple_scatter_with_errorbars.py",
+      "categories": [
+        "uncertainties and trends"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "simple_stacked_area_chart",
+      "title": "Simple Stacked Area Chart",
+      "url": "https://altair-viz.github.io/gallery/simple_stacked_area_chart.html",
+      "source_path": "tests/examples_arguments_syntax/simple_stacked_area_chart.py",
+      "categories": [
+        "simple charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "slider_cutoff",
+      "title": "Slider Cutoff",
+      "url": "https://altair-viz.github.io/gallery/slider_cutoff.html",
+      "source_path": "tests/examples_arguments_syntax/slider_cutoff.py",
+      "categories": [
+        "interactive charts"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "slope_graph",
+      "title": "Slope Graph",
+      "url": "https://altair-viz.github.io/gallery/slope_graph.html",
+      "source_path": "tests/examples_arguments_syntax/slope_graph.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "sorted_error_bars_with_ci",
+      "title": "Sorted Error Bars showing Confidence Interval",
+      "url": "https://altair-viz.github.io/gallery/sorted_error_bars_with_ci.html",
+      "source_path": "tests/examples_arguments_syntax/sorted_error_bars_with_ci.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "bootstrap confidence interval must be precomputed",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "stacked_bar_chart",
+      "title": "Stacked Bar Chart",
+      "url": "https://altair-viz.github.io/gallery/stacked_bar_chart.html",
+      "source_path": "tests/examples_arguments_syntax/stacked_bar_chart.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "stacked_bar_chart_sorted_segments",
+      "title": "Stacked Bar Chart with Sorted Segments",
+      "url": "https://altair-viz.github.io/gallery/stacked_bar_chart_sorted_segments.html",
+      "source_path": "tests/examples_arguments_syntax/stacked_bar_chart_sorted_segments.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "stacked_bar_chart_with_text",
+      "title": "Stacked Bar Chart with Text Overlay",
+      "url": "https://altair-viz.github.io/gallery/stacked_bar_chart_with_text.html",
+      "source_path": "tests/examples_arguments_syntax/stacked_bar_chart_with_text.py",
+      "categories": [
+        "bar charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "stem_and_leaf",
+      "title": "Stem and Leaf Plot",
+      "url": "https://altair-viz.github.io/gallery/stem_and_leaf.html",
+      "source_path": "tests/examples_arguments_syntax/stem_and_leaf.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "text layout not yet tested"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "step_chart",
+      "title": "Step Chart",
+      "url": "https://altair-viz.github.io/gallery/step_chart.html",
+      "source_path": "tests/examples_arguments_syntax/step_chart.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "streamgraph",
+      "title": "Streamgraph",
+      "url": "https://altair-viz.github.io/gallery/streamgraph.html",
+      "source_path": "tests/examples_arguments_syntax/streamgraph.py",
+      "categories": [
+        "area charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "centered stacking",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "strip_plot",
+      "title": "Simple Strip Plot",
+      "url": "https://altair-viz.github.io/gallery/strip_plot.html",
+      "source_path": "tests/examples_arguments_syntax/strip_plot.py",
+      "categories": [
+        "simple charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:tick",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "strip_plot_jitter",
+      "title": "Strip Plot with Jitter",
+      "url": "https://altair-viz.github.io/gallery/strip_plot_jitter.html",
+      "source_path": "tests/examples_arguments_syntax/strip_plot_jitter.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "table_bubble_plot_github",
+      "title": "Table Bubble Plot (Github Punch Card)",
+      "url": "https://altair-viz.github.io/gallery/table_bubble_plot_github.html",
+      "source_path": "tests/examples_arguments_syntax/table_bubble_plot_github.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "top_k_items",
+      "title": "Top K Items",
+      "url": "https://altair-viz.github.io/gallery/top_k_items.html",
+      "source_path": "tests/examples_arguments_syntax/top_k_items.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "top_k_letters",
+      "title": "Top K Letters",
+      "url": "https://altair-viz.github.io/gallery/top_k_letters.html",
+      "source_path": "tests/examples_arguments_syntax/top_k_letters.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "top_k_with_others",
+      "title": "Top-K Plot with Others",
+      "url": "https://altair-viz.github.io/gallery/top_k_with_others.html",
+      "source_path": "tests/examples_arguments_syntax/top_k_with_others.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:window",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "trail_marker",
+      "title": "Line Chart with Varying Size",
+      "url": "https://altair-viz.github.io/gallery/trail_marker.html",
+      "source_path": "tests/examples_arguments_syntax/trail_marker.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "compiler_gap",
+      "reason": [
+        "unsupported marks: mark:trail",
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "us_employment",
+      "title": "The U.S. Employment Crash During the Great Recession",
+      "url": "https://altair-viz.github.io/gallery/us_employment.html",
+      "source_path": "tests/examples_arguments_syntax/us_employment.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:timeunit",
+        "temporal fields/time units require materialization",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "us_incomebrackets_by_state_facet",
+      "title": "US Income by State: Wrapped Facet",
+      "url": "https://altair-viz.github.io/gallery/us_incomebrackets_by_state_facet.html",
+      "source_path": "tests/examples_arguments_syntax/us_incomebrackets_by_state_facet.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "us_population_over_time",
+      "title": "US Population by Age and Sex",
+      "url": "https://altair-viz.github.io/gallery/us_population_over_time.html",
+      "source_path": "tests/examples_arguments_syntax/us_population_over_time.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "us_population_over_time_facet",
+      "title": "US Population: Wrapped Facet",
+      "url": "https://altair-viz.github.io/gallery/us_population_over_time_facet.html",
+      "source_path": "tests/examples_arguments_syntax/us_population_over_time_facet.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "native_family_candidate",
+      "reason": [
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "us_population_pyramid_over_time",
+      "title": "US Population Pyramid Over Time",
+      "url": "https://altair-viz.github.io/gallery/us_population_pyramid_over_time.html",
+      "source_path": "tests/examples_arguments_syntax/us_population_pyramid_over_time.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "excluded_interactive",
+      "reason": [
+        "interaction is intrinsic to the gallery example"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "us_state_capitals",
+      "title": "U.S. State Capitals Overlaid on a Map of the U.S",
+      "url": "https://altair-viz.github.io/gallery/us_state_capitals.html",
+      "source_path": "tests/examples_arguments_syntax/us_state_capitals.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "violin_plot",
+      "title": "Violin Plot",
+      "url": "https://altair-viz.github.io/gallery/violin_plot.html",
+      "source_path": "tests/examples_arguments_syntax/violin_plot.py",
+      "categories": [
+        "distributions"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "density computation is absent",
+        "unimplemented transform semantics: transform:density",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "waterfall_chart",
+      "title": "Waterfall Chart",
+      "url": "https://altair-viz.github.io/gallery/waterfall_chart.html",
+      "source_path": "tests/examples_arguments_syntax/waterfall_chart.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate, transform:window"
+      ],
+      "checked": "gallery metadata and published compiler contract plus example-source inspection",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "wheat_wages",
+      "title": "Wheat and Wages",
+      "url": "https://altair-viz.github.io/gallery/wheat_wages.html",
+      "source_path": "tests/examples_arguments_syntax/wheat_wages.py",
+      "categories": [
+        "case studies"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:calculate",
+        "sample dataset must be materialized as inline data"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "wilkinson-dot-plot",
+      "title": "Wilkinson Dot Plot",
+      "url": "https://altair-viz.github.io/gallery/wilkinson-dot-plot.html",
+      "source_path": "tests/examples_arguments_syntax/wilkinson-dot-plot.py",
+      "categories": [
+        "advanced calculations"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "wind_vector_map",
+      "title": "Wind Vector Map",
+      "url": "https://altair-viz.github.io/gallery/wind_vector_map.html",
+      "source_path": "tests/examples_arguments_syntax/wind_vector_map.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "window_rank",
+      "title": "Window Rank Line Chart",
+      "url": "https://altair-viz.github.io/gallery/window_rank.html",
+      "source_path": "tests/examples_arguments_syntax/window_rank.py",
+      "categories": [
+        "line charts"
+      ],
+      "status": "preprocessing_or_adapter",
+      "reason": [
+        "unimplemented transform semantics: transform:window"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "world_map",
+      "title": "World Map",
+      "url": "https://altair-viz.github.io/gallery/world_map.html",
+      "source_path": "tests/examples_arguments_syntax/world_map.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    },
+    {
+      "id": "world_projections",
+      "title": "World Projections",
+      "url": "https://altair-viz.github.io/gallery/world_projections.html",
+      "source_path": "tests/examples_arguments_syntax/world_projections.py",
+      "categories": [
+        "maps"
+      ],
+      "status": "excluded_map",
+      "reason": [
+        "geographic/geoshape intent"
+      ],
+      "checked": "gallery metadata and published compiler contract",
+      "exact_gallery_test": "not_run",
+      "notes": "Candidate status is not proof the original Altair-generated specification compiles unchanged."
+    }
+  ]
+}
