@@ -36,6 +36,13 @@ globalThis.vlcPgfplotsNormalize = (() => {
     if (typeof u !== 'string') fail('timeUnit','expected a named time unit');
     return u.replace(/^utc/,'');
   }
+  function inferredDomain(domain, type) {
+    if(domain.length!==2 || domain[0]!==domain[1] || !Number.isFinite(domain[0]))return domain;
+    const v=domain[0];
+    if(type==='log')return v>0?[v/1.05,v*1.05]:domain;
+    const delta=['time','utc'].includes(type)?86400000:Math.abs(v)*.05 || .5;
+    return [v-delta,v+delta];
+  }
   function fieldMapping(def, flow, p) {
     let f = def.field, end;
     if (def.timeUnit) {
@@ -321,7 +328,8 @@ globalThis.vlcPgfplotsNormalize = (() => {
           }
         } else {
           if(!enc[c].type)enc[c].type=['band','point','ordinal'].includes(scale.type)?'nominal':'quantitative';
-          enc[c].scale={...(enc[c].scale||{}),domain:scale.domain};
+          const domain=enc[c].scale?.domain===undefined?inferredDomain(scale.domain,scale.type):scale.domain;
+          enc[c].scale={...(enc[c].scale||{}),domain};
           if(['nominal','ordinal'].includes(enc[c].type) && scale.range.length>=2 && scale.range.every(Number.isFinite))
             enc[c].scale.reverse=c==='y'?scale.range[0]<scale.range.at(-1):scale.range[0]>scale.range.at(-1);
           if(enc[c].sort!==undefined)delete enc[c].sort;
@@ -380,6 +388,10 @@ globalThis.vlcPgfplotsNormalize = (() => {
           const d=l.encoding?.[channel];if(!d)continue;
           if(channel==='color') {
             if(d.field && ['nominal','ordinal'].includes(d.type))d.scale={type:'ordinal',domain:scale.domain,range:scale.range.map(v=>vega.expressionFunction('rgb')(v).formatHex())};
+            else if(d.field && d.type==='quantitative') {
+              if(scale.type!=='linear' || !scale.colorRange)fail('color','shared quantitative colors require a linear scale');
+              d.scale={type:'linear',domain:scale.domain,range:scale.colorRange};
+            }
           }else d.scale={...(d.scale||{}),domain:scale.domain};
         }
       }
@@ -422,25 +434,27 @@ globalThis.vlcPgfplotsNormalize = (() => {
       for(const op of ['concat','hconcat','vconcat'])if(spec[op]) {
         out[op]=[];
         for(let i=0;i<spec[op].length;i++)out[op].push(await walk(spec[op][i],{rows,enc,config:spec.config},`${p}.${op}[${i}]`,depth+1));
-        delete out.data;return out;
+        delete out.data;
+        const channels=['x','y','color'].filter(c => spec.resolve?.scale?.[c]==='shared' || (c==='color' && spec.resolve?.scale?.[c]!=='independent'));
+        return channels.length ? resolveShared(out,{...spec,encoding:enc},rows,channels) : out;
       }
       if(spec.facet || spec.repeat || enc.row || enc.column || enc.facet) {
         // Preserve partitions: transforms inside a facet must run separately.
-        return await panels(out,rows,enc,p,depth);
+        return await panels(out,rows,enc,p,depth,spec.config);
       }
       return unit({...out,config:spec.config},rows,enc,p);
     }
-    async function panels(spec,rows,enc,p,depth) {
+    async function panels(spec,rows,enc,p,depth,originalConfig) {
       if(spec.repeat) {
         const r=spec.repeat,one=Array.isArray(r),rv=one?[null]:r.row||[null],cv=one?r:r.column||[null];
         if(r.layer) {
           const replace=(o,b)=>Array.isArray(o)?o.map(x=>replace(x,b)):o&&typeof o==='object'?own(o,'repeat')?b[o.repeat]:Object.fromEntries(Object.entries(o).map(([k,v])=>[k,replace(v,b)])):o;
-          return walk({layer:r.layer.map(layer=>replace(spec.spec,{layer})),data:{values:rows},config:spec.config}, {},p+'.repeat',depth+1);
+          return walk({layer:r.layer.map(layer=>replace(spec.spec,{layer})),data:{values:rows},config:originalConfig}, {},p+'.repeat',depth+1);
         }
         if(rv.length*cv.length>MAX_VIEWS)fail(p,'repeat panel limit exceeded');
         const replace=(o,b)=>Array.isArray(o)?o.map(x=>replace(x,b)):o&&typeof o==='object'?own(o,'repeat')?b[o.repeat]:Object.fromEntries(Object.entries(o).map(([k,v])=>[k,replace(v,b)])):o;
         const list=[];
-        for(const row of rv)for(const column of cv)list.push(await walk(replace(spec.spec,{row,column,repeat:column}),{rows},p+'.spec',depth+1));
+        for(const row of rv)for(const column of cv)list.push(await walk(replace(spec.spec,{row,column,repeat:column}),{rows,config:originalConfig},p+'.spec',depth+1));
         const out={concat:list,columns:one?(spec.columns||cv.length):cv.length,resolve:spec.resolve,title:spec.title,config:spec.config};
         return out;
       }
@@ -465,7 +479,7 @@ globalThis.vlcPgfplotsNormalize = (() => {
       const list=[];
       for(const r of rv)for(const c of cv) {
         const subset=rows.filter(x=>(!rd || same(x[rd.field],r))&&(!cd || same(x[cd.field],c)));
-        const panel=await walk(child,{rows:subset},p+'.spec',depth+1);
+        const panel=await walk(child,{rows:subset,config:originalConfig},p+'.spec',depth+1);
         panel.title=[rd?`${rd.title??rd.field}: ${r}`:null,cd?`${cd.title??cd.field}: ${c}`:null].filter(Boolean).join(' / ');
         list.push(panel);
       }

@@ -619,7 +619,8 @@ globalThis.vlcNativePgfplots = (() => {
           for (const r of rows) {
             const pt = coordinates(r);
             if (pt.some(v => v == null)) continue;
-            add({...base, type: "text", points: [pt], text: e.text ? value(r, e.text, at) : m.text ?? ""});
+            const visual=m._styleField ? field(r,m._styleField,at) : null;
+            add({...base, type: "text", points: [pt], text: e.text ? value(r, e.text, at) : m.text ?? "",fontSize:visual?.fontSize ?? m.fontSize});
           }
         } else if (m.type === "rect") {
           for (const r of rows) {
@@ -970,7 +971,7 @@ globalThis.vlcNativePgfplots = (() => {
           if (m.baseline === "top") anchor = anchor === "center" ? "north" : `north ${anchor}`;
           if (m.baseline === "bottom") anchor = anchor === "center" ? "south" : `south ${anchor}`;
           if (m.baseline === "alphabetic") anchor = anchor === "center" ? "base" : `base ${anchor}`;
-          out.push(`\\node[anchor=${anchor},text=${texColor(s.fill)},opacity=${fmt(s.opacity)},rotate=${fmt(-(m.angle || 0))},xshift=${bp(m.dx || 0)},yshift=${bp(-(m.dy || 0))},font=\\fontsize{${bp(m.fontSize || 11)}}{${bp((m.fontSize || 11)*1.2)}}\\selectfont] at (axis cs:${plot.points[0].map(fmt).join(",")}) {${label(plot.text,opts.tex_labels)}};`);
+          out.push(`\\node[anchor=${anchor},text=${texColor(s.fill)},opacity=${fmt(s.opacity)},rotate=${fmt(-(m.angle || 0))},xshift=${bp(m.dx || 0)},yshift=${bp(-(m.dy || 0))},font=\\fontsize{${bp(plot.fontSize ?? 11)}}{${bp((plot.fontSize ?? 11)*1.2)}}\\selectfont] at (axis cs:${plot.points[0].map(fmt).join(",")}) {${label(plot.text,opts.tex_labels)}};`);
         }
         if (legend) { out.push(`\\addlegendentry{${label(plot.legend,opts.tex_labels)}}`); legends.add(plot.legend); }
       }

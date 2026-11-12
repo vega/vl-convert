@@ -182,3 +182,110 @@ test('unfilled symbol color scales are found on stroke, not literal transparent 
  const spec={...base,mark:'point',encoding:{...base.encoding,color:{...q('y'),scale:{range:['red','blue'],domain:[0,10]}}}};
  const out=await run(spec);assert.deepEqual(out.ir.panels[0].colorAxis.range[0],[255,0,0]);assert.deepEqual(out.ir.panels[0].colorAxis.range.at(-1),[0,0,255]);
 });
+
+
+// Composition, datum-dependent styling, and inferred-domain regressions.
+const compositionPoint=(values,color=false)=>({data:{values},mark:'point',encoding:{x:q('x'),y:q('y'),...(color?{color:n('g')}:{})}});
+
+test('concatenation shares the official numeric x domain when requested',async()=>{
+ const input={hconcat:[compositionPoint([{x:1,y:1},{x:2,y:2}]),compositionPoint([{x:10,y:1},{x:20,y:2}])],resolve:{scale:{x:'shared'}}};
+ const before=JSON.stringify(input),out=await run(input);
+ assert.equal(JSON.stringify(input),before);
+ assert.deepEqual(out.ir.panels.map(p=>p.axes.x.domain),[[0,20],[0,20]]);
+ assert.deepEqual(out.ir.panels.map(p=>p.plots[0].points.map(v=>v[0])),[[1,2],[10,20]]);
+});
+
+test('concatenation shares categorical color mappings by default',async()=>{
+ const out=await run({hconcat:[compositionPoint([{x:1,y:1,g:'B'}],true),compositionPoint([{x:10,y:2,g:'A'}],true)]});
+ assert.deepEqual(out.ir.panels.map(p=>p.plots[0].style.stroke),[[245,133,24],[76,120,168]]);
+});
+
+test('faceted children inherit mark and axis configuration',async()=>{
+ const input={data:{values:[{g:'a',x:1,y:2},{g:'b',x:2,y:3}]},facet:{column:{field:'g',type:'nominal'}},spec:{mark:'point',encoding:{x:q('x'),y:q('y')}},config:{point:{color:'red',size:144},axis:{labels:false}}};
+ const {ir}=await run(input);
+ assert.equal(ir.panels.length,2);
+ for(const panel of ir.panels){
+  assert.equal(panel.plots[0].style.size,144);
+  assert.deepEqual(panel.plots[0].style.stroke,[255,0,0]);
+  assert.equal(panel.axes.x.axis.labels,false);
+ }
+});
+
+test('repeated children inherit mark and axis configuration',async()=>{
+ const input={data:{values:[{x:1,z:2,y:3}]},repeat:['x','z'],spec:{mark:'point',encoding:{x:{field:{repeat:'repeat'},type:'quantitative'},y:q('y')}},config:{point:{color:'red',size:144},axis:{labels:false}}};
+ const {ir}=await run(input);
+ assert.equal(ir.panels.length,2);
+ for(const panel of ir.panels){
+  assert.equal(panel.plots[0].style.size,144);
+  assert.deepEqual(panel.plots[0].style.stroke,[255,0,0]);
+  assert.equal(panel.axes.x.axis.labels,false);
+ }
+});
+
+test('data-driven text sizes retain the evaluated per-row font size',async()=>{
+ const input={data:{values:[{x:1,y:1,t:'small',sz:10},{x:2,y:2,t:'big',sz:30}]},mark:'text',encoding:{x:q('x'),y:q('y'),text:n('t'),size:q('sz')}};
+ const {ir,tex}=await run(input);
+ const sizes=ir.panels[0].plots.map(p=>p.fontSize);
+ assert.ok(Math.abs(sizes[0]-18.666666666666664)<1e-9);
+ assert.ok(Math.abs(sizes[1]-40)<1e-9);
+ const emitted=[...tex.matchAll(/font=\\fontsize\{([0-9.]+)bp\}/g)].map(x=>Number(x[1]));
+ assert.equal(emitted.length,2);
+ assert.ok(Math.abs(emitted[0]-14)<1e-9);
+ assert.ok(Math.abs(emitted[1]-30)<1e-9);
+});
+
+test('inferred singleton and all-zero domains have positive extent',async()=>{
+ for(const [y,zero] of [[5,false],[0,false],[0,undefined]]){
+  const spec=compositionPoint([{x:1,y}]);spec.encoding.y.scale=zero===undefined?{}:{zero};
+  const {ir,tex}=await run(spec),domain=ir.panels[0].axes.y.domain;
+  assert.ok(domain[0]<y && domain[1]>y);
+  assert.match(tex,/ymin=/);
+  assert.match(tex,/ymax=/);
+ }
+});
+
+test('explicit equal-bound domains remain rejected',async()=>{
+ const spec=compositionPoint([{x:1,y:5}]);spec.encoding.y.scale={domain:[5,5]};
+ await assert.rejects(run(spec),/domain must be increasing/);
+});
+
+test('shared categorical positions preserve data-category alignment',async()=>{
+ const a=compositionPoint([{x:'A',y:1}]),b=compositionPoint([{x:'C',y:2}]);
+ a.encoding.x=n('x');b.encoding.x=n('x');a.width=200;b.width=200;
+ const {ir}=await run({hconcat:[a,b],resolve:{scale:{x:'shared'}}});
+ assert.deepEqual(ir.panels.map(p=>p.axes.x.categories),[['A','C'],['A','C']]);
+ assert.deepEqual(ir.panels.map(p=>p.plots[0].points[0][0]),[0,1]);
+});
+
+test('independent categorical color scales are not accidentally merged',async()=>{
+ const {ir}=await run({hconcat:[compositionPoint([{x:1,y:1,g:'B'}],true),compositionPoint([{x:10,y:2,g:'A'}],true)],resolve:{scale:{color:'independent'}}});
+ assert.deepEqual(ir.panels.map(p=>p.plots[0].style.stroke),[[76,120,168],[76,120,168]]);
+});
+
+test('independent position scales retain child-specific domains',async()=>{
+ const {ir}=await run({hconcat:[compositionPoint([{x:1,y:1}]),compositionPoint([{x:20,y:1}])],resolve:{scale:{x:'independent'}}});
+ assert.deepEqual(ir.panels.map(p=>p.axes.x.domain),[[0,1],[0,20]]);
+});
+
+test('inferred singleton logarithmic domain expands multiplicatively',async()=>{
+ const spec=compositionPoint([{x:1,y:5}]);spec.encoding.y.scale={type:'log',zero:false};
+ const {ir}=await run(spec),domain=ir.panels[0].axes.y.domain;
+ assert.ok(domain[0]>0 && domain[0]<5 && domain[1]>5);
+});
+
+test('child mark configuration overrides facet defaults',async()=>{
+ const input={data:{values:[{g:'a',x:1,y:2},{g:'b',x:2,y:3}]},facet:{column:{field:'g',type:'nominal'}},spec:{mark:{type:'point',color:'green',size:64},encoding:{x:q('x'),y:q('y')}},config:{point:{color:'red',size:144},axis:{labels:false}}};
+ const {ir}=await run(input);
+ for(const panel of ir.panels){
+  assert.equal(panel.plots[0].style.size,64);
+  assert.deepEqual(panel.plots[0].style.stroke,[0,128,0]);
+  assert.equal(panel.axes.x.axis.labels,false);
+ }
+});
+
+test('shared quantitative colors use one evaluated domain and palette',async()=>{
+ const make=z=>({data:{values:[{x:1,y:1,z}]},mark:'circle',encoding:{x:q('x'),y:q('y'),color:q('z')}});
+ const {ir}=await run({hconcat:[make(0),make(100)]});
+ assert.deepEqual(ir.panels.map(p=>p.colorAxis.domain),[[0,100],[0,100]]);
+ assert.deepEqual(ir.panels[0].colorAxis.range,ir.panels[1].colorAxis.range);
+});
