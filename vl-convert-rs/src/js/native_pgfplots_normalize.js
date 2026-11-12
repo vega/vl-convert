@@ -208,6 +208,13 @@ globalThis.vlcPgfplotsNormalize = (() => {
         const name=Array.isArray(ref)?ref.find(r=>r.scale)?.scale:ref?.scale;
         return name?result.scales[name]:null;
       };
+      // Preserve resolved categorical label orientation; horizontal TeX defaults
+      // can make an otherwise correct dense categorical plot unreadable.
+      for(const c of ['x','y'])if(enc[c] && enc[c].axis!==null && enc[c].axis?.labelAngle===undefined) {
+        const orientations=c==='x'?['bottom','top']:['left','right'];
+        const guide=(result.compiled.axes || []).find(a=>a.labels!==false && orientations.includes(a.orient));
+        if(typeof guide?.labelAngle==='number')enc[c].axis={...enc[c].axis,labelAngle:guide.labelAngle};
+      }
       // Resolve visual channels using the evaluated official marks, never pixel
       // coordinates. Native axes still consume source-domain data below.
       const styled=['size','shape','opacity','fill','stroke','strokeWidth'].filter(c=>enc[c] && (enc[c].field || enc[c].aggregate || enc[c].condition));

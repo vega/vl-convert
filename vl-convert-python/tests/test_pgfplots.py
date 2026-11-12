@@ -56,7 +56,6 @@ def test_async_matches_sync(spec):
     [
         "not JSON",
         {"marks": []},
-        {"mark": "line", "data": {"url": "file:///etc/passwd"}},
         {"mark": "line", "params": [{"name": "selection"}]},
         {"mark": "line", "transform": [{"calculate": "1+1", "as": "x"}]},
     ],
@@ -109,3 +108,30 @@ def test_quoted_unicode_title_remains_data(spec):
     assert "textbackslash{}input" in tex
     assert r"\input{secret}" not in tex
     assert "\u2028" not in tex and "\u2029" not in tex
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_denied_data_access_raises_permission_error(tmp_path, spec, asynchronous):
+    import vl_convert.asyncio as avlc
+
+    source = tmp_path / "data.json"
+    source.write_text(json.dumps(spec["data"]["values"]), encoding="utf-8")
+    external = dict(spec, data={"url": source.resolve().as_uri()})
+    # Test access denial against an existing file on every platform, not
+    # the existence of /etc/passwd. Keep worker recovery covered too.
+    vlc.configure(allowed_base_urls=[])
+    try:
+        if asynchronous:
+
+            async def run():
+                with pytest.raises(PermissionError, match="VLC_ACCESS_DENIED"):
+                    await avlc.vegalite_to_pgfplots(external)
+                assert r"\addplot" in await avlc.vegalite_to_pgfplots(spec)
+
+            asyncio.run(run())
+        else:
+            with pytest.raises(PermissionError, match="VLC_ACCESS_DENIED"):
+                vlc.vegalite_to_pgfplots(external)
+            assert r"\addplot" in vlc.vegalite_to_pgfplots(spec)
+    finally:
+        vlc.configure(allowed_base_urls=None)

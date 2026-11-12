@@ -145,3 +145,12 @@ test('transparent constant fills do not become opaque black',async()=>{
  assert.equal(out.ir.panels[0].plots[0].style.fill,null);
  await assert.rejects(run({...base,mark:{type:'point',fill:'rgba(0,0,0,0.5)'}}),/explicit opacity/);
 });
+
+test('categorical default label orientation is retained without overriding explicit choices',async()=>{
+ const s={data:{values:[{category:'One',v:2},{category:'Two',v:4}]},mark:'bar',encoding:{x:n('category'),y:q('v')}};
+ const defaultOut=await run(s);assert.equal(defaultOut.ir.panels[0].axes.x.axis.labelAngle,270);
+ assert.match(defaultOut.tex,/xticklabel style=\{rotate=-270,anchor=east\}/);
+ s.encoding.x.axis={labelAngle:0};const flat=await run(s);assert.equal(flat.ir.panels[0].axes.x.axis.labelAngle,0);
+ assert.doesNotMatch(flat.tex,/rotate=-270/);
+ s.encoding.x.axis=null;assert.equal((await run(s)).ir.panels[0].axes.x.axis,null);
+});
