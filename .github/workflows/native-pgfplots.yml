@@ -11,7 +11,6 @@ on:
       - 'vl-convert/src/bin/vl2pgfplots.rs'
       - 'vl-convert/tests/test_pgfplots_cli.rs'
       - 'docs/source/_topics/*pgfplots*'
-      - 'docs/source/_topics/altair*'
       - '.github/workflows/native-pgfplots.yml'
       - 'Cargo.lock'
   push:

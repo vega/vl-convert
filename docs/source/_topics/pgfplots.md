@@ -10,204 +10,99 @@ interfaces: [python, cli, rust]
 
 # Native PGFPlots export
 
-This experimental backend emits **editable PGFPlots axes, data coordinates,
-legends, and TeX labels**. It replaces the earlier SVG-outline prototype. It does
-not reconstruct plots from SVG, hide a picture inside an axis, or embed a PDF.
+Export Vega-Lite charts as editable PGFPlots axes, data coordinates, legends and
+TeX labels. The converter returns TeX source rather than an embedded image.
+The bundled Vega-Lite compiler and Vega runtime evaluate the dataflow; PGFPlots
+controls typography and layout, which differ from Vega's SVG/PDF output.
 
-It is a native emitter for a static Cartesian **subset** of Vega-Lite v5/v6.
-The bundled official Vega-Lite compiler and Vega runtime evaluate dataflows;
-the native emitter handles axes, series, and TeX. It is not an implementation
-of the entire Vega-Lite graphical language. Native
-TeX typography, tick selection, layout, and default padding differ from Vega.
-Numerical meaning, rather than pixel-identical appearance, is the contract.
-
-## Python
-
+::::{interface} python
 ```python
 from pathlib import Path
+
 import vl_convert as vlc
 
 spec = {
-    "data": {"values": [{"t": 1, "E": 2}, {"t": 2, "E": 4}]},
+    "data": {"values": [{"x": 1, "y": 2}, {"x": 2, "y": 4}]},
     "mark": {"type": "line", "point": True},
     "encoding": {
-        "x": {"field": "t", "type": "quantitative", "title": "$t$ (s)"},
-        "y": {"field": "E", "type": "quantitative", "title": r"$E_{\mathrm{kin}}$ (eV)"},
+        "x": {"field": "x", "type": "quantitative"},
+        "y": {"field": "y", "type": "quantitative"},
     },
 }
-Path("figure.tex").write_text(
-    vlc.vegalite_to_pgfplots(spec, standalone=True, tex_labels=True),
-    encoding="utf-8",
-)
+tex = vlc.vegalite_to_pgfplots(spec, standalone=True)
+Path("figure.tex").write_text(tex, encoding="utf-8")
 ```
 
-Inputs may be dictionaries or JSON strings. `vl_version="v5_8"` selects a
-bundled compiler; omitting it uses the default version. The asynchronous counterpart is
-`await vl_convert.asyncio.vegalite_to_pgfplots(spec, ...)`, with the same options.
+Inputs may also be JSON strings. The asynchronous counterpart is
+`await vl_convert.asyncio.vegalite_to_pgfplots(spec, ...)`.
+Pass `vl_version="6.4"` to select a bundled compiler instead of the default.
+::::
 
-**Security:** `tex_labels=False` escapes TeX metacharacters. Set it to `True`
-only for trusted labels: arbitrary TeX can read files or execute commands when
-compiled. `-no-shell-escape` alone is not a complete TeX sandbox. Conversion itself never runs TeX. Vega evaluates its own restricted expression
-language, not arbitrary caller JavaScript. Data loading uses the same configured
-resource-access policy as other converter targets.
+::::{interface} cli
+```console
+$ vl2pgfplots --input chart.vl.json --output figure.tex --standalone
+$ vl2pgfplots --standalone < chart.vl.json > figure.tex
+```
 
-## Rust and CLI
+`vl2pgfplots` is a separate executable in the CLI package. Use `--vl-version`
+to select a bundled compiler and `--vlc-config PATH` to load converter settings,
+including resource permissions. Conversion errors leave an existing output file untouched.
+::::
 
+::::{interface} rust
 ```rust
 use vl_convert_rs::{PgfplotsOpts, VlConverter};
 
-let output = VlConverter::new().vegalite_to_pgfplots(
-    spec,
-    PgfplotsOpts { standalone: true, tex_labels: false },
-).await?;
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let output = VlConverter::new()
+    .vegalite_to_pgfplots(spec, PgfplotsOpts { standalone: true, ..Default::default() })
+    .await?;
 std::fs::write("figure.tex", output.tex)?;
 ```
 
+Diagnostics are available in `output.logs`. Use
+`vegalite_to_pgfplots_with_version(spec, version, opts)` to select a bundled compiler.
+::::
+
+## Typesetting and mathematics
+
+`standalone=True` (CLI: `--standalone`) includes the document class and required
+packages. Compile the result with a TeX installation containing PGFPlots:
+
 ```sh
-cargo run -p vl-convert --bin vl2pgfplots -- \
-  --input chart.vl.json --output figure.tex --standalone
-vl2pgfplots --standalone < chart.vl.json > figure.tex
 pdflatex -no-shell-escape -halt-on-error figure.tex
 ```
 
-`--tex-labels` enables trusted mathematical labels. Conversion errors leave an
-existing output file untouched. The compiler returns TeX; it never launches a
-TeX process. TeX controls fonts and layout rather than Google Fonts or browser themes.
-The existing converter resource policy and worker limits apply. Per-call theme,
-locale and plugin options are not exposed by this API. The old draft's `vega_to_pgfplots` and
-`svg_to_pgfplots` interfaces are removed: arbitrary Vega/SVG do not retain the
-high-level semantics required by this compiler.
+The default is a `tikzpicture` fragment. Its containing document needs `pgfplots`
+with `compat=1.18` and the `groupplots`, `fillbetween`, `statistics`, `patchplots`
+and `colormaps` libraries. TeX supplies fonts rather than Google Fonts.
 
-`--vl-version` selects a bundled compiler, and `--vlc-config PATH` loads the
-existing JSONC converter configuration, including resource permissions. Rust
-provides `vegalite_to_pgfplots_with_version(spec, version, opts)`; successful
-outputs retain official compiler/runtime diagnostics in `logs`.
+Labels are escaped by default. Enable `tex_labels=True` (CLI: `--tex-labels`)
+for trusted math labels such as `"$t$ (s)"` or `r"$E_{\mathrm{kin}}$"`.
+Raw TeX can read files or execute commands during typesetting; use trusted labels
+and a sandboxed typesetter. Disabling shell escape alone is not a sandbox.
+The converter itself never runs TeX. Data loading follows the same
+resource-access policy as other conversion targets.
 
-A fragment requires `pgfplots` and the `groupplots`, `fillbetween`, `statistics`,
-`patchplots`, and `colormaps` libraries. Standalone output includes those imports
-and uses compatibility level 1.18. Font size/line width/figure dimensions are
-converted from SVG-style pixels to PDF big points at 0.75 bp per pixel; data
-coordinates remain in their original numerical units.
+## Supported charts and limits
 
-## Supported semantics
+| Area | Support |
+| --- | --- |
+| Marks | Lines, steps, monotone curves, points, ticks, bars, areas, error bars/bands, box plots, rectangular heatmaps, rules and text |
+| Axes | Linear, logarithmic, temporal and categorical; domains, reversal, grids, labels and ticks |
+| Composition | Shared-scale layers, two-layer independent y axes, concatenation, simple row/column facets and repeat |
+| Data | Inline, named and permission-controlled external sources; static transforms evaluated by the official Vega runtime |
 
-| Input | Native output and conditions |
-|---|---|
-| Lines, points, steps, monotone curves | `addplot coordinates`; missing values interrupt paths; monotone controls come from Vega and remain data-coordinate paths |
-| Bars | Vertical/horizontal, explicit intervals, zero/normalized stacks; `stack: null` overlaps; grouped bars require the matching categorical `xOffset`/`yOffset` and color field |
-| Areas, error bands | Named data-coordinate paths and `fill between`; intervals can be supplied explicitly |
-| Error bars | Native asymmetric/symmetric errors on either axis; bounds are retained |
-| Box plots | `boxplot prepared`, R7 quartiles, Tukey whiskers/outliers or min–max; default whisker extent 1.5 IQR |
-| Heatmaps, colored points | Rectangular patches or scatter metadata, native colorbars; linear quantitative color with viridis or an explicit RGB range |
-| Axes and guides | Linear/log, temporal coordinates/calendar labels, categorical ticks, domains, reversal, grids, labels, explicit tick values and Vega numeric formats |
-| Tick and variable-size/shape points | Native point/tick marks and size/shape legends; evaluated styles retain source data coordinates |
-| Annotations | Rules and editable text at `axis cs` coordinates |
-| Composition | Shared-scale layers, two-layer independent y axes, concatenation, simple row/column facets and repeat, native groupplots, explicit scale resolution |
-| Data | Inline/named/permission-controlled external sources; official calculate, window, joinaggregate, timeUnit, bin, fold, aggregate and other static dataflow evaluation |
+Unsupported mark, guide or layout options raise errors with the property path.
+Maps, polar/3D coordinates, interactions, arbitrary custom shapes and deeper
+nested composition are not supported. Input must be Vega-Lite, not raw Vega or
+SVG. Per-call theme, locale and plugin options are not exposed by this API.
 
-Aggregates include count, sum, mean, min, max, median, quartiles, sample standard
-deviation, and standard error. Quantiles use linear interpolation at
-`(n-1)*p`. Standard deviation uses denominator `n-1`; standard error divides it
-by `sqrt(n)`. Null values are excluded from statistics; absent fields and invalid
-numeric types fail. Empty or singleton groups that cannot define a sample
-standard error are not assigned an invented interval. Positive/negative stacks
-are separated; normalized negative stacks are rejected. Histogram bins are
-left-closed/right-open except the final bin, which includes the explicit upper
-extent. Extent and step must define an integer number of bins.
+Data coordinates retain their numerical units; display dimensions use 0.75 bp
+per pixel. Grouped bars require matching categorical offset and color fields;
+negative normalized stacks are rejected. Continuous colorbars interpolate 256
+colors from the evaluated scale. Bootstrap intervals and jitter follow Vega's
+randomized evaluation; supply precomputed values for identical repeated output.
 
-Raw confidence-interval composite marks are normalized by the official compiler;
-bootstrap intervals are not replaced with standard-error estimates. Randomized
-statistics and jitter can vary between evaluations. Supply precomputed intervals
-when exact repeated values are required; the exporter does not silently change
-Vega's random-number generator or claim seed-independent CI parity.
-
-The normalizer maps each primitive to the compiled mark's real data-source
-reference and traces dataflow ancestry to locate generated fields. It does not
-assume generated names such as `data_0`, and it rejects ambiguous or unsupported
-scopes. Datum-bound styles may be resolved from evaluated marks; plot geometry
-is emitted from data values, not traced SVG or scenegraph pixel positions.
-
-Categorical y axes retain Vega's top-to-bottom category order, including explicit
-reversal. Continuous colorbars use 256 evaluated RGB knots from the official
-scale, including its default palette and reversal; this is a native interpolation
-of that palette, not a promise of pixel-identical color sampling. Colors outside
-an explicit domain require precomputed styles rather than silent clamping.
-
-## Explicit limitations
-
-Unsupported properties raise path-specific errors. Examples include polar/geographic/3D coordinates, interactions, unsupported
-custom shapes or path-dependent styling, unsupported composition/guide options,
-and arbitrary JavaScript. Nested data fields are evaluated by Vega and flattened
-with collision checks. Unknown graphical options are not silently discarded.
-The available static transform set is wider than the native mark/layout set; a
-transform succeeding does not guarantee that its resulting chart is supported. Nested composition beyond the
-supported layer/panel structure is rejected. Facet/offset variants and color
-scale options are deliberately restricted; this is not full grammar coverage.
-
-Limits: 8 MiB serialized input at the Rust/CLI boundary; 100,000 rows per input
-source; 64 panels; 64 layers per panel; bounded recursion; 32 MiB TeX output.
-Output limits are not a substitute for process memory/time limits. An exported
-figure still needs journal-specific typography, accessibility and layout review.
-
-## Reproducible tests
-
-Both production JavaScript modules included by Rust are tested directly under
-Node against the same vendored Vega libraries. The test loader makes no network
-requests. There is no Python surrogate compiler.
-
-```sh
-node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
-node --no-warnings --loader ./vl-convert-rs/tests/native-pgfplots/vendor-loader.mjs \
-  --test vl-convert-rs/tests/native-pgfplots/normalize.test.mjs
-python vl-convert-rs/tests/native-pgfplots/verify_tex.py /tmp/pgfplots-check
-cargo test -p vl-convert-rs --test test_pgfplots -- --test-threads=1
-cargo test -p vl-convert --test test_pgfplots_cli -- --test-threads=1
-pixi run dev-py
-pixi run test-py
-```
-
-The rendering driver requires Node 22, TeX Live/PGFPlots and PyMuPDF. It compiles
-all fixtures, checks that PDFs contain vector graphics and text, and independently
-measures linear/log coordinates, uncertainty endpoints, histogram boundaries,
-boxplot outliers and quantitative colors. It also writes PNGs for visual review.
-Use `--native` with the built extension and `--cli /path/to/vl2pgfplots` to compare
-those interfaces byte-for-byte with the shared compiler output. Missing native
-components fail these explicit checks rather than being silently skipped.
-
-The fork PR records which tests were actually run. Passing Node/TeX tests alone
-does not establish that Rust/PyO3 packaging builds, that every Vega-Lite feature
-is implemented, or that a figure meets a publication's requirements.
-
-## Gallery conformance (phase 0)
-
-`gallery_export.py` executes pinned Altair example sources and stores their
-unchanged emitted specifications. Example datasets are matched against Altair's
-recorded Git blob identities. `gallery_run.mjs` preserves the original spec,
-reference SVG, normalized spec, native IR, emitted TeX, and diagnostics.
-`gallery_render.py` compiles actual TeX and produces side-by-side images. Reports
-keep `reference`, `latex`, `numerical_parity`, and `visual_review` separate:
-LaTeX success alone is not a scientific-fidelity pass.
-
-The source pin is Altair `27f89b8d4f2861d446cde8a13480ca5e366eb318`.
-External-source acquisition failures are recorded separately from compiler
-failures. See the workflow artifact and `pgfplots-conformance.json` for observed
-results and unresolved cases; the earlier gallery registry is a planning
-classification, not a list of verified passes.
-
-
-## Acceptance and limitations
-
-The [gallery coverage record](pgfplots-gallery.md) separates the original
-planning classifications from executed conformance results. The CI artifact
-`altair-pgfplots-conformance` includes all original specifications, reference
-SVGs, generated TeX/PDF pairs, per-stage diagnostics, and a summary. Controlled
-unsupported cases are reported; source/reference failures and regressions in
-previously accepted examples fail the job.
-
-Successful conversion is not a claim of pixel-identical output or independent
-scientific review. The normalization fixtures separately measure temporal and
-logarithmic coordinates, rolling means, calculated uncertainties, physical tick
-lengths, symbol areas, and independent-axis alignment. Native Python and CLI
-output must agree with the production JavaScript modules for deterministic
-fixtures. Randomized bootstrap/jitter cases are identified rather than given a
-false byte-equivalence claim.
+Limits are 8 MiB serialized input, 100,000 rows per source, 64 panels,
+64 layers per panel and 32 MiB TeX output. Converter worker limits still apply.

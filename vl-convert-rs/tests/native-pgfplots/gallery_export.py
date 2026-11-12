@@ -13,16 +13,13 @@ import ast
 import hashlib
 import importlib.metadata
 import json
-import os
-from pathlib import Path
 import random
-import sys
 import subprocess
+import sys
 import traceback
-from urllib.parse import urlparse, unquote
+from pathlib import Path
 
-ALTAIR_COMMIT = "27f89b8d4f2861d446cde8a13480ca5e366eb318"
-ROOT = Path(__file__).resolve().parents[3]
+from gallery_catalog import exclusions, load_baseline, load_catalog
 
 
 def sha256(path):
@@ -36,12 +33,13 @@ def main():
     parser.add_argument("--datasets", type=Path, required=True)
     parser.add_argument("--allow-source-archive", action="store_true")
     args = parser.parse_args()
+    baseline = load_baseline()
     source = args.altair_source.resolve()
     pin = subprocess.run(
         ["git", "-C", str(source), "rev-parse", "HEAD"], capture_output=True, text=True
     )
     if pin.returncode == 0:
-        if pin.stdout.strip() != ALTAIR_COMMIT:
+        if pin.stdout.strip() != baseline["altair_commit"]:
             raise RuntimeError("Altair checkout does not match the reviewed commit")
     elif not args.allow_source_archive:
         raise RuntimeError(
@@ -60,27 +58,16 @@ def main():
             "Metadata-Version: 2.1\nName: altair\nVersion: 4.0.0+fallback\n"
         )
         sys.path.insert(0, str(metadata.parent))
-    import numpy as np
     import altair as alt
+    import numpy as np
     from altair.datasets._cache import DatasetCache, csv_cache
-    from altair.datasets._cache import _iter_metadata
 
     alt.data_transformers.disable_max_rows()
-    registry = json.loads(
-        (ROOT / "docs/source/_topics/altair_gallery_registry.json").read_text()
-    )
     manifest_path = source / "_data/examples.json"
-    if (
-        sha256(manifest_path)
-        != "106d2a6be9677f33f905bedcaff59e5a6c134bcd29953eac6b6466a8eff277e3"
-    ):
-        raise RuntimeError("Altair gallery catalog content does not match the pin")
-    manifest = json.loads(manifest_path.read_text())
-    entries = {e["name"]: e for e in manifest["examples"]}
-    if set(entries) != {e["id"] for e in registry["examples"]}:
-        raise RuntimeError(
-            "Pinned gallery catalog differs from registry; review exclusions before running"
-        )
+    entries = load_catalog(manifest_path, baseline)
+    excluded = exclusions(baseline)
+    # Keep the exact catalog with the generated report, not in product docs.
+    (args.output / "catalog.json").write_bytes(manifest_path.read_bytes())
     urls = {}
     used = set()
     metadata = list(csv_cache.mapping.values())
@@ -107,20 +94,21 @@ def main():
 
     DatasetCache._maybe_download = local_dataset
     results = []
-    for entry in registry["examples"]:
-        slug = entry["id"]
+    for entry in entries:
+        slug = entry["name"]
+        classification = excluded.get(slug, "in_scope")
         record = {
             "id": slug,
-            "classification": entry["status"],
+            "classification": classification,
             "url": entry["url"],
             "status": "not_run",
         }
-        if entry["status"].startswith("excluded_"):
-            record["status"] = entry["status"]
+        if slug in excluded:
+            record["status"] = classification
             results.append(record)
             continue
         used.clear()
-        path = source / entries[slug]["path"]
+        path = source / entry["path"]
         record["source_sha256"] = sha256(path)
         case = args.output / slug
         case.mkdir(exist_ok=True)
@@ -156,7 +144,7 @@ def main():
             (case / "source_error.txt").write_text(traceback.format_exc())
         results.append(record)
     report = {
-        "altair_commit": ALTAIR_COMMIT,
+        "altair_commit": baseline["altair_commit"],
         "altair_schema": alt.SCHEMA_VERSION,
         "catalog_sha256": sha256(manifest_path),
         "python": sys.version,

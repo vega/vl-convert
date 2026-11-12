@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "description": "Original-spec conversion and LaTeX acceptance baseline, not a scientific-parity claim. Unknown errors/source failures always fail; newly supported cases also have to render.",
+  "version": 2,
+  "description": "Original-spec conversion and LaTeX acceptance baseline; numerical and visual parity are checked separately.",
   "altair_commit": "27f89b8d4f2861d446cde8a13480ca5e366eb318",
   "accepted": [
     "andrews_curves",
@@ -94,5 +94,60 @@
     "us_population_over_time_facet",
     "wilkinson-dot-plot",
     "window_rank"
-  ]
+  ],
+  "catalog_sha256": "106d2a6be9677f33f905bedcaff59e5a6c134bcd29953eac6b6466a8eff277e3",
+  "excluded": {
+    "excluded_map": [
+      "airport_connections",
+      "choropleth",
+      "choropleth_repeat",
+      "groupby-map",
+      "interval_selection_map_quakes",
+      "london_tube",
+      "maps_faceted_species",
+      "one_dot_per_zipcode",
+      "point_map",
+      "us_incomebrackets_by_state_facet",
+      "us_state_capitals",
+      "wind_vector_map",
+      "world_map",
+      "world_projections"
+    ],
+    "excluded_interactive": [
+      "dot_dash_plot",
+      "histogram_responsive",
+      "interactive_aggregation",
+      "interactive_bar_select_highlight",
+      "interactive_bin_size",
+      "interactive_brush",
+      "interactive_column_selection",
+      "interactive_cross_highlight",
+      "interactive_date_input",
+      "interactive_layered_crossfilter",
+      "interactive_legend",
+      "interactive_reorder_stacked_bars",
+      "interactive_scatter_plot",
+      "interval_selection",
+      "multiline_highlight",
+      "multiline_tooltip",
+      "multiline_tooltip_standard",
+      "multiple_interactions",
+      "scatter_href",
+      "scatter_linked_brush",
+      "scatter_linked_table",
+      "scatter_point_paths_hover",
+      "scatter_tooltips",
+      "scatter_with_histogram",
+      "scatter_with_layered_histogram",
+      "scatter_with_minimap",
+      "select_detail",
+      "select_mark_area",
+      "selection_histogram",
+      "selection_layer_bar_month",
+      "selection_zorder",
+      "slider_cutoff",
+      "us_population_over_time",
+      "us_population_pyramid_over_time"
+    ]
+  }
 }
