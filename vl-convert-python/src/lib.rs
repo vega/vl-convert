@@ -90,7 +90,16 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    pyo3_log::init();
+    // `pyo3_log` is the global logger here, so the `env_logger` filter set up in
+    // vl-convert-rs never applies. Drop SWC's tree-shaker spans, which are logged
+    // at ERROR level but aren't errors, before they reach Python's logging.
+    pyo3_log::Logger::new(py, pyo3_log::Caching::LoggersAndLevels)?
+        .filter_target(
+            "swc_ecma_transforms_optimization".to_owned(),
+            log::LevelFilter::Off,
+        )
+        .install()
+        .expect("no other logger is installed");
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;

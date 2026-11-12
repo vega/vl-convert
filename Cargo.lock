@@ -10940,6 +10940,7 @@ version = "2.0.0-rc7"
 dependencies = [
  "futures",
  "lazy_static",
+ "log",
  "pyo3",
  "pyo3-async-runtimes",
  "pyo3-log",

@@ -1,4 +1,6 @@
 import logging
+import subprocess
+import sys
 import warnings
 
 import vl_convert as vlc
@@ -121,3 +123,16 @@ def test_show_warnings_deprecation():
     deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
     assert len(deprecation_warnings) >= 1, "Expected DeprecationWarning for show_warnings"
     assert "show_warnings is deprecated" in str(deprecation_warnings[0].message)
+
+
+def test_bundling_does_not_log_swc_tree_shaker_spans():
+    # SWC logs its tree-shaker passes at ERROR level, but they aren't errors.
+    # Run in a fresh process, since the bundle is cached after the first call.
+    script = (
+        "import vl_convert as vlc\n"
+        "vlc.vegalite_to_html({'mark': 'point'}, bundle=True)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+    assert "tree-shaker" not in result.stderr
