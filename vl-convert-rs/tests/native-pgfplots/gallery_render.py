@@ -55,12 +55,11 @@ def run_case(case, row):
         row["latex"] = "passed"
         target = image(pdf)
         target.save(case / "native.png")
-        if (case / "reference.svg").exists():
-            with fitz.open(
-                stream=(case / "reference.svg").read_bytes(), filetype="svg"
-            ) as ref:
-                reference = image(ref.convert_to_pdf())
-            reference.save(case / "reference.png")
+        # The built reference renderer supplies this image. Do not approximate
+        # Vega gradients/fonts with a generic SVG-to-PDF conversion.
+        if (case / "reference.png").exists():
+            with Image.open(case / "reference.png") as ref:
+                reference = ref.convert("RGB")
             canvas = Image.new("RGB", (1440, 660), "white")
             draw = ImageDraw.Draw(canvas)
             draw.text((20, 12), row["id"], fill="black")

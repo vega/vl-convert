@@ -101,7 +101,13 @@ globalThis.vlcPgfplotsNormalize = (() => {
         }
         const scales = Object.fromEntries((compiled.scales || []).map(s => {
           const scale=runtime.scale(s.name);
-          return [s.name,{...s,domain:scale.domain().map(scalar),range:scale.range(),ticks:typeof scale.ticks==='function'?scale.ticks(5).map(scalar):scale.domain().map(scalar),legendValues:(typeof scale.ticks==='function'?scale.ticks(4):scale.domain()).map(v=>({value:scalar(v),mapped:scale(v)}))}];
+          const domain=scale.domain().map(scalar);
+          // Sample the actual color mapping, including default/reversed schemes.
+          // Use 256 evaluated RGB knots for the native continuous colorbar;
+          // this retains schemes/reversal instead of substituting a palette.
+          const colorRange=s.type==='linear' && domain.length===2 && domain.every(Number.isFinite) && typeof scale(domain[0])==='string'
+            ? Array.from({length:256},(_,i)=>vega.expressionFunction('rgb')(scale(domain[0]+(domain[1]-domain[0])*i/255)).formatHex()) : null;
+          return [s.name,{...s,colorRange,domain,range:scale.range(),ticks:typeof scale.ticks==='function'?scale.ticks(5).map(scalar):scale.domain().map(scalar),legendValues:(typeof scale.ticks==='function'?scale.ticks(4):scale.domain()).map(v=>({value:scalar(v),mapped:scale(v)}))}];
         }));
         const painted=new Map();
         function visit(node) {
@@ -181,6 +187,8 @@ globalThis.vlcPgfplotsNormalize = (() => {
       // Encoding-level transforms are evaluated below for primitive marks.
       const composite = ['boxplot','errorbar','errorband'].includes(type);
       if (composite && !Object.values(enc).some(d=>d?.timeUnit || d?.bin || d?.aggregate || d?.type==='temporal')) {
+        // Vega's categorical y ranges run top-to-bottom, unlike Cartesian y.
+        if(['nominal','ordinal'].includes(enc.y?.type))enc.y.scale={...enc.y.scale,reverse:!enc.y.scale?.reverse};
         return {...spec,config:configuration(spec.config),data:{values:rows},transform:undefined,mark:m,encoding:enc};
       }
       const result = await evaluate({data:{values:rows}, mark:m, encoding:enc, config:spec.config});
@@ -203,9 +211,8 @@ globalThis.vlcPgfplotsNormalize = (() => {
       }
       const update=compiledMark.encode?.update || {};
       const scaleFor=channel=>{
-        const property=({color:m.filled===false||type==='line'?'stroke':'fill'})[channel]||channel;
-        const ref=update[property] || (channel==='x'?update.xc:channel==='y'?update.yc:null);
-        const name=Array.isArray(ref)?ref.find(r=>r.scale)?.scale:ref?.scale;
+        const properties=channel==='color'?['fill','stroke']:[channel,...(channel==='x'?['xc']:channel==='y'?['yc']:[])];
+        const name=properties.flatMap(k=>Array.isArray(update[k])?update[k]:[update[k]]).find(r=>r?.scale)?.scale;
         return name?result.scales[name]:null;
       };
       // Preserve resolved categorical label orientation; horizontal TeX defaults
@@ -306,14 +313,17 @@ globalThis.vlcPgfplotsNormalize = (() => {
         if(!scale)continue;
         if(c==='color') {
           if(['nominal','ordinal'].includes(enc[c].type))enc[c].scale={type:'ordinal',domain:scale.domain,range:scale.range.map(v=>vega.expressionFunction('rgb')(v).formatHex())};
-          else if(enc[c].scale?.scheme && typeof enc[c].scale.scheme==='string') {
-            const sampler=vega.scheme(enc[c].scale.scheme);
-            if(typeof sampler!=='function')fail(p,'unsupported quantitative color scheme');
-            enc[c].scale={type:'linear',domain:[scale.domain[0],scale.domain.at(-1)],range:Array.from({length:16},(_,i)=>vega.expressionFunction('rgb')(sampler(i/15)).formatHex())};
+          else {
+            if(scale.type!=='linear' || !scale.colorRange)fail(p,'quantitative color requires a two-bound linear scale');
+            if(values.some(r=>r[enc[c].field]!=null && (r[enc[c].field]<scale.domain[0] || r[enc[c].field]>scale.domain[1])))
+              fail(p,'quantitative colors outside an explicit domain require precomputed styles');
+            enc[c].scale={type:'linear',domain:scale.domain,range:scale.colorRange};
           }
         } else {
           if(!enc[c].type)enc[c].type=['band','point','ordinal'].includes(scale.type)?'nominal':'quantitative';
           enc[c].scale={...(enc[c].scale||{}),domain:scale.domain};
+          if(['nominal','ordinal'].includes(enc[c].type) && scale.range.length>=2 && scale.range.every(Number.isFinite))
+            enc[c].scale.reverse=c==='y'?scale.range[0]<scale.range.at(-1):scale.range[0]>scale.range.at(-1);
           if(enc[c].sort!==undefined)delete enc[c].sort;
           for(const k of ['padding','domainMin','domainMax','nice'])delete enc[c].scale[k];
         }

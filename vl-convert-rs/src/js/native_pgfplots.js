@@ -464,7 +464,7 @@ globalThis.vlcNativePgfplots = (() => {
       if (domain[0] === domain[1] && !c.scale?.domain) domain = [domain[0]-.5,domain[1]+.5];
       if (domain[0] >= domain[1]) fail(p,"color domain must be increasing");
       let range = null;
-      if (c.scale?.range) { range=array(c.scale.range,p).map(v=>color(v,p)); if (range.length<2 || range.length>32) fail(p,"color range requires 2 to 32 colors"); }
+      if (c.scale?.range) { range=array(c.scale.range,p).map(v=>color(v,p)); if (range.length<2 || range.length>256) fail(p,"color range requires 2 to 256 colors"); }
       if (c.scale?.scheme) { choice(c.scale.scheme,["viridis"],p); if (range) fail(p,"choose either color range or scheme"); }
       colorAxis = {domain,range,title:c.legend?.title ?? c.title,show:c.legend !== null};
     }

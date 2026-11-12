@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from gallery_native import materialize_urls, randomized
+from gallery_native import compare_coordinates, materialize_urls, randomized
 
 
 class GalleryContracts(unittest.TestCase):
@@ -40,6 +40,23 @@ class GalleryContracts(unittest.TestCase):
             source.write_text("[]")
             with self.assertRaisesRegex(ValueError, "content changed"):
                 materialize_urls(spec, registry)
+
+    def test_runtime_roundoff_is_bounded_without_ignoring_styles_or_structure(self):
+        a = r"\addplot[color=blue] coordinates {(0.1,0.9950041652780257) (2,4)};"
+        b = a.replace("0.9950041652780257", "0.9950041652780258")
+        result = compare_coordinates(a, b)
+        self.assertEqual(result["status"], "equivalent_coordinates")
+        self.assertLess(result["max_absolute_difference"], 2e-16)
+        self.assertEqual(compare_coordinates(a, a)["status"], "identical")
+        for changed in (
+            a.replace("blue", "red"),
+            a.replace("(2,4)", "(2,4.000001)"),
+            a.replace("(2,4)", "(4,2)"),
+            a.replace("(2,4)", "(2,nan)"),
+            a + r"\addlegendentry{changed}",
+        ):
+            with self.assertRaises(AssertionError):
+                compare_coordinates(a, changed)
 
     def test_unregistered_resource_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unpinned"):

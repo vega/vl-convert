@@ -164,14 +164,34 @@ def check_geometry(output):
         rect = frame(page)
         image = page.get_pixmap(matrix=fitz.Matrix(2, 2), colorspace=fitz.csRGB)
         for x, y, z in [(0, 0, 0), (0, 1, 1), (1, 0, 2), (1, 1, 3)]:
-            point = mapped(rect, x, y, [-0.5, 1.5], [-0.5, 1.5])
+            # Official categorical y places the first category at the top.
+            point = mapped(rect, x, y, [-0.5, 1.5], [1.5, -0.5])
             sample = image.pixel(round(point.x * 2), round(point.y * 2))
-            expected = (round(z / 3 * 255), 0, round((1 - z / 3) * 255))
+            # Vega-Lite's default interpolation is HCL even for an RGB range.
+            expected = [(0, 0, 255), (212, 0, 178), (255, 0, 92), (255, 0, 0)][z]
             assert max(abs(a - b) for a, b in zip(sample, expected)) <= 3, (
                 sample,
                 expected,
             )
         results.append({"probe": "heatmap", "cells": 4, "rgb_tolerance": 3})
+    with fitz.open(output / "default_heatmap.pdf") as doc:
+        page = doc[0]
+        rect = frame(page)
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), colorspace=fitz.csRGB)
+        # Vega's default heatmap scale is a yellow-green-blue HCL ramp, not
+        # viridis. Known official endpoints plus category order catch both bugs.
+        for x, y, rgb in [(0, 0, (239, 249, 189)), (1, 1, (28, 49, 133))]:
+            point = mapped(rect, x, y, [-0.5, 1.5], [1.5, -0.5])
+            sample = pix.pixel(round(point.x * 2), round(point.y * 2))
+            assert max(abs(a - b) for a, b in zip(sample, rgb)) <= 3, (sample, rgb)
+        results.append(
+            {
+                "probe": "default_heatmap",
+                "categorical_y": "top_to_bottom",
+                "rgb_tolerance": 3,
+            }
+        )
+
     with fitz.open(output / "calendar_utc.pdf") as doc:
         text = doc[0].get_text()
         assert "2024-02-29" in text and "1012" not in text

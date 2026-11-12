@@ -47,6 +47,7 @@ def main():
                 failures.append(f"{row['id']}: LaTeX did not pass")
             if args.require_native and row.get("interfaces") not in (
                 "identical",
+                "equivalent_coordinates",
                 "executed_randomized_no_byte_equality_claim",
             ):
                 failures.append(f"{row['id']}: native interfaces not verified")

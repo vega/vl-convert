@@ -6,6 +6,8 @@ const rows = [{x: 1, y: 2}, {x: 2, y: 4}, {x: 3, y: 8}];
 const base = {width: 300, height: 200, data: {values: rows}, mark: 'line',
   encoding: {x: domain('x', [0, 4]), y: domain('y', [0, 10])}};
 export const normalizationFixtures = {
+  default_heatmap: {width:300,height:200,data:{values:[{x:'A',y:'X',z:0},{x:'A',y:'Y',z:25},{x:'B',y:'X',z:25},{x:'B',y:'Y',z:50}]},mark:'rect',
+    encoding:{x:{field:'x',type:'nominal'},y:{field:'y',type:'nominal'},color:q('z')}},
   rolling_mean: {...base, transform: [{window: [{op: 'mean', field: 'y', as: 'mean'}],
     frame: [-1, 0], sort: [{field: 'x'}]}],
     encoding: {...base.encoding, y: domain('mean', [0, 10])}},

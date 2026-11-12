@@ -154,3 +154,31 @@ test('categorical default label orientation is retained without overriding expli
  assert.doesNotMatch(flat.tex,/rotate=-270/);
  s.encoding.x.axis=null;assert.equal((await run(s)).ir.panels[0].axes.x.axis,null);
 });
+
+test('categorical y orientation follows official scales, including explicit reversal',async()=>{
+ const spec={data:{values:[{g:'A',v:2},{g:'B',v:4}]},mark:'bar',encoding:{x:q('v'),y:n('g')}};
+ const out=await run(spec);assert.deepEqual(out.ir.panels[0].axes.y.categories,['A','B']);assert.equal(out.ir.panels[0].axes.y.scale.reverse,true);
+ spec.encoding.y.scale={reverse:true};assert.equal((await run(spec)).ir.panels[0].axes.y.scale.reverse,false);
+ spec.mark={type:'errorbar',extent:'stderr'};spec.data.values=[{g:'A',v:2},{g:'A',v:3},{g:'B',v:4},{g:'B',v:5}];
+ delete spec.encoding.y.scale;assert.equal((await run(spec)).ir.panels[0].axes.y.scale.reverse,true);
+});
+test('default and reversed quantitative color use the actual official mapping',async()=>{
+ const input={data:{values:[{a:'A',b:'X',z:0},{a:'B',b:'Y',z:50}]},mark:'rect',encoding:{x:n('a'),y:n('b'),color:q('z')}};
+ for(const reverse of [false,true]){
+  input.encoding.color.scale={reverse};
+  const expected=new vega.View(vega.parse(vl.compile(input).spec),{renderer:'none'});
+  try{
+   await expected.runAsync();const scale=expected.scale('color');
+   const actual=(await run(input)).ir.panels[0].colorAxis;
+   assert.equal(actual.range.length,256);
+   for(const [i,value] of [[0,0],[127,50*127/255],[255,50]]){
+    const rgb=vega.expressionFunction('rgb')(scale(value));
+    assert.deepEqual(actual.range[i],[Math.round(rgb.r),Math.round(rgb.g),Math.round(rgb.b)]);
+   }
+  }finally{expected.finalize();}
+ }
+});
+test('unfilled symbol color scales are found on stroke, not literal transparent fill',async()=>{
+ const spec={...base,mark:'point',encoding:{...base.encoding,color:{...q('y'),scale:{range:['red','blue'],domain:[0,10]}}}};
+ const out=await run(spec);assert.deepEqual(out.ir.panels[0].colorAxis.range[0],[255,0,0]);assert.deepEqual(out.ir.panels[0].colorAxis.range.at(-1),[0,0,255]);
+});

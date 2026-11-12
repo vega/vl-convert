@@ -127,6 +127,12 @@ assume generated names such as `data_0`, and it rejects ambiguous or unsupported
 scopes. Datum-bound styles may be resolved from evaluated marks; plot geometry
 is emitted from data values, not traced SVG or scenegraph pixel positions.
 
+Categorical y axes retain Vega's top-to-bottom category order, including explicit
+reversal. Continuous colorbars use 256 evaluated RGB knots from the official
+scale, including its default palette and reversal; this is a native interpolation
+of that palette, not a promise of pixel-identical color sampling. Colors outside
+an explicit domain require precomputed styles rather than silent clamping.
+
 ## Explicit limitations
 
 Unsupported properties raise path-specific errors. Examples include polar/geographic/3D coordinates, interactions, unsupported
