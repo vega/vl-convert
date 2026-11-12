@@ -1,0 +1,47 @@
+const q = field => ({field, type: 'quantitative'});
+const n = field => ({field, type: 'nominal'});
+const basic = {width:300,height:200,data:{values:[{x:1,y:2},{x:2,y:4},{x:3,y:3}]},mark:'line',encoding:{x:q('x'),y:q('y')}};
+const clone = obj => JSON.parse(JSON.stringify(obj));
+function fixtures() {
+ const out = {};
+ out.line = clone(basic);
+ out.points = {...clone(basic),mark:{type:'point',filled:true,shape:'diamond',size:60}};
+ out.log = clone(basic); out.log.encoding.y.scale={type:'log',domain:[1,10]}; out.log.encoding.y.title='Response (mV)';
+ out.steps = {...clone(basic),mark:{type:'line',interpolate:'step-after',strokeDash:[4,2]}};
+ out.gaps = clone(basic); out.gaps.data.values.splice(1,0,{x:1.5,y:null});
+ out.bar = {data:{values:[{g:'A',v:2},{g:'B',v:5},{g:'C',v:-1}]},mark:'bar',encoding:{x:n('g'),y:q('v')}};
+ out.horizontal_bar = {data:out.bar.data,mark:'bar',encoding:{x:q('v'),y:n('g')}};
+ const rows = [{g:'A',s:'one',v:2},{g:'A',s:'two',v:3},{g:'B',s:'one',v:4},{g:'B',s:'two',v:5}];
+ out.stacked = {data:{values:rows},mark:'bar',encoding:{x:n('g'),y:q('v'),color:n('s')}};
+ out.grouped = clone(out.stacked); out.grouped.encoding.y.stack=null; out.grouped.encoding.xOffset=n('s');
+ out.overlapping = clone(out.stacked); out.overlapping.encoding.y.stack=null;
+ out.normalized = clone(out.stacked); out.normalized.encoding.y.stack='normalize';
+ out.band = {data:{values:[{x:1,lo:1,hi:3},{x:2,lo:2,hi:5},{x:3,lo:2.5,hi:4}]},mark:{type:'errorband',opacity:.25},encoding:{x:q('x'),y:q('lo'),y2:{field:'hi'}}};
+ out.errorbars = {...clone(out.band),mark:'errorbar'};
+ out.asymmetric = {data:{values:[{x:1,y:4,plus:2,minus:-1},{x:2,y:3,plus:1.5,minus:-.5}]},mark:'errorbar',encoding:{x:q('x'),y:q('y'),yError:{field:'plus'},yError2:{field:'minus'}}};
+ out.horizontal_errors = {data:{values:[{g:'A',x:4,e:1},{g:'B',x:3,e:.5}]},mark:'errorbar',encoding:{x:q('x'),y:n('g'),xError:{field:'e'}}};
+ out.boxplot = {data:{values:[1,2,3,4,5,6,100].map(v=>({g:'A',v}))},mark:'boxplot',encoding:{x:n('g'),y:q('v')}};
+ out.horizontal_boxplot = {data:out.boxplot.data,mark:'boxplot',encoding:{x:q('v'),y:n('g')}};
+ out.stderr = {data:out.boxplot.data,mark:{type:'errorbar',extent:'stderr'},encoding:{x:n('g'),y:q('v')}};
+ out.histogram = {data:{values:[.2,.4,1.4,2,2.2,3.5,4].map(v=>({v}))},mark:'bar',encoding:{x:{...q('v'),bin:{step:1,extent:[0,4]}},y:{aggregate:'count',type:'quantitative'}}};
+ out.area = {...clone(basic),mark:{type:'area',opacity:.25}};
+ out.rect = {data:{values:[{x:1,x2:2,y:1,y2:2},{x:2,x2:3,y:2,y2:4}]},mark:'rect',encoding:{x:q('x'),x2:{field:'x2'},y:q('y'),y2:{field:'y2'}}};
+ out.layered = {data:basic.data,layer:[{mark:'line',encoding:basic.encoding},{mark:'point',encoding:basic.encoding},{mark:{type:'rule',color:'red'},encoding:{y:{datum:2.5}}},{mark:{type:'text',dy:-8,align:'left'},data:{values:[{}]},encoding:{x:{datum:1.1},y:{datum:2.5},text:{value:'Threshold'}}}]};
+ out.panels = {hconcat:[clone(out.points),clone(out.log)]};
+ out.aggregate = {data:out.stacked.data,mark:'bar',encoding:{x:n('g'),y:{...q('v'),aggregate:'sum'}}};
+ out.filtered = {...clone(basic),transform:[{filter:{field:'x',gte:2}}]};
+ out.math = clone(basic); out.math.encoding.x.title='$t$ (s)'; out.math.encoding.y.title='$E_{\\mathrm{kin}}$ (eV)';
+ out.heatmap = {data:{values:[{a:'A',b:'X',z:0},{a:'A',b:'Y',z:1},{a:'B',b:'X',z:2},{a:'B',b:'Y',z:3}]},mark:'rect',encoding:{x:n('a'),y:n('b'),color:{...q('z'),scale:{range:['#0000ff','#ff0000'],domain:[0,3]}}}};
+ out.colored_scatter = {...clone(basic),mark:{type:'circle',size:80},encoding:{...clone(basic.encoding),color:{...q('y'),scale:{scheme:'viridis'}}}};
+ out.facets={data:{values:[{g:'one',x:'A',y:1},{g:'one',x:'B',y:3},{g:'two',x:'B',y:5},{g:'two',x:'C',y:2}]},facet:{field:'g',type:'nominal'},spec:{mark:'bar',encoding:{x:n('x'),y:q('y')}}};
+ out.repeat={data:{values:[{x:1,a:2,b:3},{x:2,a:4,b:5}]},repeat:['a','b'],spec:{mark:'line',encoding:{x:q('x'),y:{field:{repeat:'repeat'},type:'quantitative'}}}};
+ out.greek = clone(basic); out.greek.encoding.y.title=["α ± σ","measurement"];
+ out.decimal_histogram={data:{values:[.3,.3-1e-8,.6,.9].map(v=>({v}))},mark:'bar',encoding:{x:{...q('v'),bin:{step:.1,extent:[0,1]}},y:{aggregate:'count',type:'quantitative'}}};
+ out.single_normalized={data:{values:[{g:'A',v:2},{g:'B',v:4}]},mark:'bar',encoding:{x:n('g'),y:{...q('v'),stack:'normalize'}}};
+ // Fixed plot-area domains make PDF-coordinate assertions independent of
+ // Vega-Lite's mark-dependent default `zero` policy.
+ out.line.encoding.x.scale={domain:[0,3]};
+ out.log.encoding.x.scale={domain:[0,3]};
+ return out;
+}
+module.exports={fixtures,basic,q,n,clone};

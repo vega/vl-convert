@@ -138,3 +138,9 @@ pixi run docs-build-strict
 ```
 
 VlConvert is distributed under the BSD 3-Clause license.
+
+## Native PGFPlots export
+
+Export static Cartesian Vega-Lite charts as editable axes, data-coordinate plots
+and TeX labels. See the [PGFPlots guide](docs/source/_topics/pgfplots.md) for usage,
+mathematical labels and supported features.

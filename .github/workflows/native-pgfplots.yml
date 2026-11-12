@@ -1,0 +1,163 @@
+name: Native PGFPlots semantics and TeX
+on:
+  pull_request:
+    paths:
+      - 'vl-convert-rs/src/**'
+      - 'vl-convert-rs/tests/test_pgfplots.rs'
+      - 'vl-convert-rs/tests/native-pgfplots/**'
+      - 'vl-convert-python/src/**'
+      - 'vl-convert-python/vl_convert.pyi'
+      - 'vl-convert-python/tests/test_pgfplots.py'
+      - 'vl-convert/src/bin/vl2pgfplots.rs'
+      - 'vl-convert/tests/test_pgfplots_cli.rs'
+      - 'docs/source/_topics/*pgfplots*'
+      - '.github/workflows/native-pgfplots.yml'
+      - 'Cargo.lock'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-pgfplots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  RUST_MIN_STACK: 8388608
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+  CARGO_PROFILE_RELEASE_DEBUG: '0'
+  TZ: UTC
+jobs:
+  semantics-and-tex:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test both production modules against bundled Vega libraries
+        run: |
+          node --test --experimental-test-coverage vl-convert-rs/tests/native-pgfplots/native.test.cjs
+          node --no-warnings --loader ./vl-convert-rs/tests/native-pgfplots/vendor-loader.mjs --test vl-convert-rs/tests/native-pgfplots/normalize.test.mjs
+          python vl-convert-rs/tests/native-pgfplots/test_gallery_contracts.py
+      - name: Install rendering test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-extra texlive-pictures texlive-fonts-recommended
+          python -m pip install 'PyMuPDF>=1.24,<2'
+      - name: Compile fixtures and verify PDF geometry
+        run: python vl-convert-rs/tests/native-pgfplots/verify_tex.py "$RUNNER_TEMP/pgfplots-check"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-pgfplots-tex-evidence
+          path: ${{ runner.temp }}/pgfplots-check
+          if-no-files-found: warn
+  native-interfaces:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt,clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-pgfplots-linux
+          cache-on-failure: true
+      - name: Install TeX and Python test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-extra texlive-pictures texlive-fonts-recommended
+          python -m venv .venv
+          .venv/bin/python -m pip install maturin 'pytest>=8,<9' 'PyMuPDF>=1.24,<2'
+      - name: Check Rust formatting and native interfaces
+        run: |
+          cargo fmt --all -- --check
+          cargo test -p vl-convert-rs --test test_pgfplots -- --test-threads=1
+          cargo test -p vl-convert --test test_pgfplots_cli -- --test-threads=1
+          cargo build -p vl-convert --bin vl2pgfplots
+      - name: Build and test the Python extension
+        run: |
+          source .venv/bin/activate
+          maturin develop -m vl-convert-python/Cargo.toml
+          python -m pytest vl-convert-python/tests/test_pgfplots.py -v
+          maturin build -m vl-convert-python/Cargo.toml -o "$RUNNER_TEMP/pgfplots-build"
+          cp target/debug/vl2pgfplots "$RUNNER_TEMP/pgfplots-build/"
+      - name: Compare built interfaces and render actual native output
+        run: |
+          source .venv/bin/activate
+          python vl-convert-rs/tests/native-pgfplots/verify_tex.py "$RUNNER_TEMP/pgfplots-native" --native --cli "$PWD/target/debug/vl2pgfplots"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pgfplots-native-build
+          path: ${{ runner.temp }}/pgfplots-build
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-pgfplots-built-interface-evidence
+          path: ${{ runner.temp }}/pgfplots-native
+          if-no-files-found: warn
+  gallery-conformance:
+    needs: native-interfaces
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: vega/altair
+          ref: 27f89b8d4f2861d446cde8a13480ca5e366eb318
+          path: .gallery/altair
+      - uses: actions/checkout@v4
+        with:
+          repository: vega/vega-datasets
+          ref: v3.2.1
+          path: .gallery/vega-datasets
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pgfplots-native-build
+          path: .gallery/native-build
+      - name: Install pinned-source fixture dependencies and TeX
+        run: |
+          python -m pip install .gallery/native-build/*.whl 'numpy>=1.26,<3' 'pandas>=2,<3' 'polars>=1,<2' 'narwhals>=2.4,<3' 'jsonschema>=4.18,<5' jinja2 packaging typing_extensions 'scipy>=1.12,<2' 'PyMuPDF>=1.24,<2' 'pillow>=10,<13'
+          chmod +x .gallery/native-build/vl2pgfplots
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-extra texlive-pictures texlive-fonts-recommended
+      - name: Execute original sources and official reference renderer
+        run: |
+          python vl-convert-rs/tests/native-pgfplots/gallery_export.py "$RUNNER_TEMP/gallery" --altair-source .gallery/altair --datasets .gallery/vega-datasets
+          node --no-warnings --loader ./vl-convert-rs/tests/native-pgfplots/vendor-loader.mjs vl-convert-rs/tests/native-pgfplots/gallery_run.mjs "$RUNNER_TEMP/gallery"
+      - name: Verify built Python and CLI against the same specs
+        run: python vl-convert-rs/tests/native-pgfplots/gallery_native.py "$RUNNER_TEMP/gallery" --cli .gallery/native-build/vl2pgfplots
+      - name: Render actual native output and reject acceptance regressions
+        run: |
+          python vl-convert-rs/tests/native-pgfplots/gallery_render.py "$RUNNER_TEMP/gallery"
+          python vl-convert-rs/tests/native-pgfplots/gallery_check.py "$RUNNER_TEMP/gallery" --require-native
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: altair-pgfplots-conformance
+          path: ${{ runner.temp }}/gallery
+          if-no-files-found: warn
+          retention-days: 14

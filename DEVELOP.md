@@ -21,6 +21,31 @@ Then run the Python tests
 pixi run test-py
 ```
 
+# PGFPlots tests
+
+The production JavaScript is tested against the same vendored Vega libraries
+used by the Rust worker. Run these checks from the repository root with Node 22:
+
+```sh
+node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
+node --no-warnings --loader ./vl-convert-rs/tests/native-pgfplots/vendor-loader.mjs --test vl-convert-rs/tests/native-pgfplots/normalize.test.mjs
+python vl-convert-rs/tests/native-pgfplots/test_gallery_contracts.py
+```
+
+With PGFPlots 1.18 and PyMuPDF installed, render fixtures and check PDF geometry:
+
+```sh
+python vl-convert-rs/tests/native-pgfplots/verify_tex.py target/pgfplots
+```
+
+Add `--native --cli target/debug/vl2pgfplots` to compare the built Python and CLI
+interfaces. Generated TeX, PDFs, images and reports belong in the output directory
+or CI artifacts, not documentation. The gallery job uses a pinned Altair catalog;
+`gallery-accepted.json` contains only its source identity and reviewed test policy.
+Keep the catalog hash, source revision and exclusion policy consistent when updating
+fixtures. Add independent numerical assertions rather than deriving expected
+results from the compiler under test.
+
 # Debug Logging
 To enable logging, set the RUST_LOG environment variable to info, warn, or error
 ```sh

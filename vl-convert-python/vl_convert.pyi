@@ -206,6 +206,7 @@ __all__ = [
     "vegalite_to_html",
     "vegalite_to_jpeg",
     "vegalite_to_pdf",
+    "vegalite_to_pgfplots",
     "vegalite_to_png",
     "vegalite_to_scenegraph",
     "vegalite_to_svg",
@@ -321,7 +322,7 @@ def current_font_directories() -> list[str]:
     - ``set_font_directories(paths)``: replace the full list.
 
     Returns:
-        Absolute paths to the registered font directories.
+        Absolute paths to the registered directories.
     """
     ...
 
@@ -421,7 +422,7 @@ def configure(
         subset_fonts: Subset fonts to only the characters used in the chart. Applies to SVG
             and HTML output. ``None`` resets to the built-in default (``True``).
         missing_fonts: Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
-            ``None`` resets to the built-in default (``"fallback"``).
+            ``None`` resets to the default (``"fallback"``).
         google_fonts: Google Fonts to register for all subsequent conversions. Each entry is
             a family-name string or a dict with ``"family"`` (required) and
             optionally ``"variants"`` (list of ``(weight, style)`` tuples). Fonts
@@ -434,19 +435,16 @@ def configure(
             reaches this threshold, the next font request fails the conversion.
             Configured, per-call, and automatically discovered families all count.
             A single request can take the total above the threshold.
-            Must be >= 1 if provided. ``None``
-            resets to the built-in default (no cap). Passing ``0`` raises
-            ``ValueError``.
+            Must be >= 1 if provided. ``None`` resets to the built-in default
+            (no cap). Passing ``0`` raises ``ValueError``.
         max_v8_heap_size_mb: Maximum JavaScript (V8) heap size per worker in megabytes.
             Must be at least 64 if provided, the smallest heap V8 accepts. ``None``
-            resets to the built-in default (no cap). Passing ``0`` raises
-            ``ValueError``, and values below 64 raise ``ValueError`` when the
-            converter is built.
+            resets to the default (no cap). Passing ``0`` raises ``ValueError``,
+            and values below 64 raise ``ValueError`` when the converter is built.
         max_v8_execution_time_secs: Maximum JavaScript (V8) execution time in seconds.
             Must be >= 1 if provided. When exceeded, JavaScript execution stops
             and the conversion returns an error. ``None`` resets to the built-in
-            default (no cap). Passing ``0`` raises
-            ``ValueError``.
+            default (no cap). Passing ``0`` raises ``ValueError``.
         gc_after_conversion: Whether to run JavaScript garbage collection after each conversion.
             This can reduce retained heap but adds work. ``None`` resets to the
             default (``False``).
@@ -478,8 +476,8 @@ def configure(
             Per-request ``format_locale`` overrides this if set. ``None`` resets
             to the built-in default (no locale).
         default_time_format_locale: Default d3-time-format locale name or dictionary applied to all conversions.
-            Per-request ``time_format_locale`` overrides this if set. ``None``
-            resets to the built-in default (no locale).
+            Per-request ``time_format_locale`` overrides this if set. ``None`` resets
+            to the built-in default (no locale).
         themes: Custom named themes mapping names to Vega config objects.
             Registered alongside built-in vega-themes. Custom themes take
             priority over built-in themes if names collide. ``None`` (or ``{}``)
@@ -1244,6 +1242,16 @@ def get_vegalite_versions() -> list[str]:
 
 if TYPE_CHECKING:
     class _AsyncioModule:
+        async def vegalite_to_pgfplots(
+            self,
+            vl_spec: VlSpec,
+            *,
+            standalone: bool = False,
+            tex_labels: bool = False,
+            vl_version: str | None = None,
+        ) -> str:
+            """Async native PGFPlots compilation. See the synchronous function."""
+            ...
         def get_format_locale(self, name: FormatLocaleName) -> dict[str, Any]:
             """See :func:`vl_convert.get_format_locale` for full documentation."""
             ...
@@ -1613,3 +1621,20 @@ if TYPE_CHECKING:
             ...
 
     asyncio: _AsyncioModule
+
+def vegalite_to_pgfplots(
+    vl_spec: VlSpec,
+    *,
+    standalone: bool = False,
+    tex_labels: bool = False,
+    vl_version: str | None = None,
+) -> str:
+    """
+    Compile a static Vega-Lite subset to native PGFPlots axes and data coordinates.
+
+    Unsupported features raise ValueError. Labels are escaped unless tex_labels
+    is enabled for trusted input. Raw TeX can access files when later compiled.
+    Data transforms use the selected bundled Vega runtime; resource access follows
+    converter configuration. Native TeX controls typography.
+    """
+    ...

@@ -2,6 +2,7 @@ mod conversions;
 mod fonts;
 pub(crate) use fonts::resolve_google_fonts;
 mod init;
+mod pgfplots;
 mod rendering;
 mod runtime;
 
