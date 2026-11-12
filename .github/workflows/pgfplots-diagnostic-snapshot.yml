@@ -22,7 +22,7 @@ jobs:
           repository: vega/vega-datasets
           ref: v3.2.1
           path: .gallery/vega-datasets
-      - name: Record exact sources for offline reproduction
+      - name: Record current sources for offline reproduction
         run: |
           mkdir -p "$RUNNER_TEMP/pgfplots-source"
           git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/pgfplots-source/source.tar.gz"
@@ -30,10 +30,14 @@ jobs:
           git -C .gallery/altair archive --format=tar HEAD | gzip > "$RUNNER_TEMP/pgfplots-source/altair.tar.gz"
           git -C .gallery/vega-datasets archive --format=tar HEAD | gzip > "$RUNNER_TEMP/pgfplots-source/datasets.tar.gz"
           git -C .gallery/vega-datasets rev-parse HEAD > "$RUNNER_TEMP/pgfplots-source/datasets-commit.txt"
+          python -m pip download --only-binary=:all: --no-deps ruff==0.14.10 -d "$RUNNER_TEMP/pgfplots-source"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: pgfplots-diagnostic-source
           path: ${{ runner.temp }}/pgfplots-source
           retention-days: 3
-      - name: Run dependency-free compiler tests
-        run: node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
+      - name: Test both production modules
+        run: |
+          node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
+          node --no-warnings --loader ./vl-convert-rs/tests/native-pgfplots/vendor-loader.mjs --test vl-convert-rs/tests/native-pgfplots/normalize.test.mjs
