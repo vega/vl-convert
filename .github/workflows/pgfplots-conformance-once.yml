@@ -17,27 +17,31 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Apply reviewed source patch with content verification
+      - name: Apply content-verified production and test patches only
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python - <<'PY'
           import base64, hashlib, json, lzma, os, subprocess, urllib.request
-          chunks = ['0431d6fe466e32795859809956ab215ff430c498', '976ee54ed6b69a0c7b69b11e71a150ca2604761f', 'c727c597cb261f97854a156c0223c6fdbc201daf', 'd977af31a9b8cc030a0314d5270368b1409b342e']
-          content = []
-          for sha in chunks:
+          def blob(sha):
               request = urllib.request.Request('https://api.github.com/repos/marcusinthesky/vl-convert/git/blobs/' + sha, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
               with urllib.request.urlopen(request, timeout=30) as response:
-                  blob = json.load(response)
-              chunk = base64.b64decode(blob['content'])
-              assert hashlib.sha1(b'blob ' + str(len(chunk)).encode() + b'\0' + chunk).hexdigest() == sha
-              content.append(chunk)
-          patch = lzma.decompress(base64.b64decode(b''.join(content), validate=True))
-          assert hashlib.sha256(patch).hexdigest() == 'c0459d038ae4c0fe453b2d1e1eb9e3aa932c364d648cee8ec3469c02e1f96c75'
-          subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
-          subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+                  data = base64.b64decode(json.load(response)['content'])
+              assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == sha
+              return data
+          patches = [
+              (['0431d6fe466e32795859809956ab215ff430c498','976ee54ed6b69a0c7b69b11e71a150ca2604761f','c727c597cb261f97854a156c0223c6fdbc201daf','d977af31a9b8cc030a0314d5270368b1409b342e'], 'c0459d038ae4c0fe453b2d1e1eb9e3aa932c364d648cee8ec3469c02e1f96c75'),
+              (['715e10820a46d636e5f953f90f27935a4b5f432b'], '95e490a3ff6d5b071593b369cbbdcb251fb8cc3ac7867550e55a8f85ecfc7ba6'),
+          ]
+          for chunks, digest in patches:
+              patch = lzma.decompress(base64.b64decode(b''.join(blob(s) for s in chunks), validate=True))
+              assert hashlib.sha256(patch).hexdigest() == digest
+              # Workflow edits are applied separately through the authorized connector.
+              command = ['git', 'apply', '--exclude=.github/**']
+              subprocess.run(command + ['--check','-'], input=patch, check=True)
+              subprocess.run(command + ['-'], input=patch, check=True)
           PY
-      - name: Check renderer, official normalization, gallery contract and docs generation
+      - name: Check production modules, gallery contracts, and docs
         run: |
           python -m pip install pyyaml packaging ruff==0.14.10
           node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
@@ -47,11 +51,10 @@ jobs:
           ruff format --check vl-convert-python
           ruff format --check vl-convert-rs/tests/native-pgfplots/*.py
           git diff --check
-      - name: Commit verified changes and remove this one-shot workflow
+      - name: Commit verified source and test changes
         run: |
-          git rm .github/workflows/pgfplots-conformance-once.yml
-          git add .github/workflows/native-pgfplots.yml .github/workflows/pgfplots-gallery-pairs.yml docs/source/_topics/pgfplots.md docs/source/_topics/altair-gallery-coverage.md vl-convert-rs/src/js/native_pgfplots.js vl-convert-rs/src/js/native_pgfplots_normalize.js vl-convert-rs/tests/native-pgfplots
+          git add docs/source/_topics/pgfplots.md docs/source/_topics/altair-gallery-coverage.md vl-convert-rs/src/js/native_pgfplots.js vl-convert-rs/src/js/native_pgfplots_normalize.js vl-convert-rs/tests/native-pgfplots
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'test(pgfplots): gate original gallery and native LaTeX conformance'
+          git commit -m 'fix(pgfplots): preserve symbol semantics and gate native gallery conformance'
           git push origin HEAD:feature/experimental-pgfplots-export
