@@ -4,11 +4,12 @@ import * as vl from '/npm/vega-lite@6.4.3/+esm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import fixtureModule from './fixtures.cjs';
+import {normalizationFixtures} from './normalization-fixtures.mjs';
 import '../../src/js/native_pgfplots.js';
 import '../../src/js/native_pgfplots_normalize.js';
 const dir=process.argv[2];if(!dir)throw new Error('An output directory is required');
 await fs.mkdir(dir,{recursive:true});
-for(const [name,spec] of Object.entries(fixtureModule.fixtures())){
+for(const [name,spec] of Object.entries({...fixtureModule.fixtures(), ...normalizationFixtures})){
  const options={standalone:true,tex_labels:name==='math'};
  const result=await globalThis.vlcPgfplotsNormalize.prepare(spec,{vega,vl});
  const ir=globalThis.vlcPgfplotsNormalize.decorate(globalThis.vlcNativePgfplots.lower(result.spec),vega);

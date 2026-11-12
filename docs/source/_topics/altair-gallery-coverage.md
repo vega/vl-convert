@@ -1,3 +1,13 @@
+---
+title: PGFPlots gallery coverage
+path: guides/pgfplots-gallery
+section: Advanced
+order: 350
+interfaces: [python, cli, rust]
+---
+
+<!-- topic-body -->
+
 # Altair gallery → native PGFPlots: capability registry
 
 Pinned catalog: **188 unique examples**, from Altair gallery manifest blob `130022d1ad70537f1be96a7e5374818224904b99`. Generated 2026-11-11.
@@ -6,7 +16,23 @@ Pinned catalog: **188 unique examples**, from Altair gallery manifest blob `1300
 
 Counts: `excluded_map` **14**; `native_family_candidate` **56**; `compiler_gap` **28**; `preprocessing_or_adapter` **56**; `excluded_interactive` **34**.
 
-## Status contract
+## Executable conformance
+
+The table below is the **historical planning baseline**, not current test results.
+Run the `gallery-conformance` job in **Native PGFPlots semantics and TeX** for
+source-pinned observed results. Its `altair-pgfplots-conformance` artifact contains
+`outcomes.json`, `summary.json`, per-case original and normalized specifications,
+reference SVG, native TeX/PDF, and an HTML index of paired images. Accepted-case
+regressions, unobserved cases, source failures, and reference-renderer failures
+fail CI. Unsupported graphical features remain explicit outcomes; they do not
+become compatibility passes.
+
+The built PyO3 extension and CLI are checked against the identical production
+JavaScript modules, and the rendering pass compiles the actual extension output.
+Numeric probes and human visual approval are separate fields; rendering alone
+does not set either to passed. See [Native PGFPlots export](pgfplots.md).
+
+## Historical status contract
 
 - `excluded_map`: outside requested scope.
 - `excluded_interactive`: interaction intrinsic to example; outside requested scope.
@@ -14,7 +40,7 @@ Counts: `excluded_map` **14**; `native_family_candidate` **56**; `compiler_gap` 
 - `preprocessing_or_adapter`: requires materializing data/transforms/temporal fields or rewriting the spec.
 - `compiler_gap`: current compiler lacks required semantics/styling, not just a test.
 
-Every candidate needs an actual source-spec and rendered-PDF test before being called supported. See [machine-readable JSON registry](altair_gallery_registry.json).
+Every candidate needs an actual source-spec and rendered-PDF test before being called supported. See [machine-readable JSON registry](https://github.com/marcusinthesky/vl-convert/blob/feature/experimental-pgfplots-export/docs/source/_topics/altair_gallery_registry.json).
 
 | Gallery example | Status | Main blocker / qualification |
 |---|---|---|

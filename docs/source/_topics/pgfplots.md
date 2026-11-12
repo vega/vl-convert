@@ -1,6 +1,12 @@
 ---
-orphan: true
+title: Native PGFPlots export
+path: guides/pgfplots
+section: Convert and Export
+order: 250
+interfaces: [python, cli, rust]
 ---
+
+<!-- topic-body -->
 
 # Native PGFPlots export
 
@@ -47,7 +53,7 @@ resource-access policy as other converter targets.
 
 ## Rust and CLI
 
-```rust,ignore
+```rust
 use vl_convert_rs::{PgfplotsOpts, VlConverter};
 
 let output = VlConverter::new().vegalite_to_pgfplots(
@@ -181,3 +187,21 @@ External-source acquisition failures are recorded separately from compiler
 failures. See the workflow artifact and `pgfplots-conformance.json` for observed
 results and unresolved cases; the earlier gallery registry is a planning
 classification, not a list of verified passes.
+
+
+## Acceptance and limitations
+
+The [gallery coverage record](pgfplots-gallery.md) separates the original
+planning classifications from executed conformance results. The CI artifact
+`altair-pgfplots-conformance` includes all original specifications, reference
+SVGs, generated TeX/PDF pairs, per-stage diagnostics, and a summary. Controlled
+unsupported cases are reported; source/reference failures and regressions in
+previously accepted examples fail the job.
+
+Successful conversion is not a claim of pixel-identical output or independent
+scientific review. The normalization fixtures separately measure temporal and
+logarithmic coordinates, rolling means, calculated uncertainties, physical tick
+lengths, symbol areas, and independent-axis alignment. Native Python and CLI
+output must agree with the production JavaScript modules for deterministic
+fixtures. Randomized bootstrap/jitter cases are identified rather than given a
+false byte-equivalence claim.

@@ -83,6 +83,7 @@ test('quoted labels and Unicode separators stay data, not generated expressions'
  assert.ok(!/[\u2028\u2029]/.test(out.tex));
  assert.match((await run(base)).tex,/\\addplot/);
 });
+
 test('shared layered axes remain visible unless all layers explicitly hide them',async()=>{
  const spec={data:base.data,layer:[{mark:'bar',encoding:base.encoding},{mark:'line',encoding:base.encoding}]};
  let out=await run(spec);
@@ -93,4 +94,54 @@ test('shared layered axes remain visible unless all layers explicitly hide them'
  out=await run(spec);assert.notEqual(out.ir.panels[0].axes.x.axis,null);
  spec.layer[1].encoding.x.axis=null;
  out=await run(spec);assert.equal(out.ir.panels[0].axes.x.axis,null);
+});
+
+
+test('unsupported non-BMP labels fail before returning uncompilable TeX',async()=>{
+ const spec=structuredClone(base);spec.encoding.x.title='cattle \u{1f404}';
+ await assert.rejects(run(spec),/non-BMP glyphs require a trusted TeX label/);
+});
+
+
+test('transparent view strokes and explicitly unfilled points are retained',async()=>{
+ const out=await run({...base,mark:{type:'point',fill:'none'},config:{view:{stroke:'transparent'}}});
+ assert.equal(out.spec.config.view.stroke,null);
+ assert.equal(out.ir.panels[0].plots[0].style.fill,null);
+});
+test('color datum retains its scaled color and native legend',async()=>{
+ const out=await run({...base,encoding:{...base.encoding,color:{datum:'Revenue',type:'nominal',scale:{domain:['Revenue'],range:['#123456']}}}});
+ assert.deepEqual(out.ir.panels[0].plots[0].style.stroke,[18,52,86]);
+ assert.match(out.tex,/\\addlegendentry\{Revenue\}/);
+});
+
+
+test('calendar labels have no misleading epoch-number multiplier',async()=>{
+ const out=await run({data:{values:[{d:'2024-02-28',v:2},{d:'2024-03-01',v:3}]},mark:'line',encoding:{x:{field:'d',type:'temporal',scale:{type:'utc'},axis:{format:'%Y-%m-%d'}},y:q('v')}});
+ assert.match(out.tex,/scaled x ticks=false/);
+});
+
+
+test('filled symbols without a stroke do not acquire a black TeX outline',async()=>{
+ const out=await run({...base,mark:{type:'point',filled:true},encoding:{...base.encoding,size:q('y')}});
+ assert.equal(out.ir.panels[0].plots[0].style.stroke,null);
+ assert.match(out.tex,/mark options=\{[^}]*draw=none,draw opacity=0,/);
+});
+
+
+test('transparent variable-size symbols and their legends stay unfilled',async()=>{
+ const spec={...base,mark:'point',encoding:{...base.encoding,size:{...q('y'),scale:{domain:[0,8],range:[0,144]}}}};
+ const out=await run(spec),panel=out.ir.panels[0];
+ for(const plot of panel.plots){assert.equal(plot.style.fill,null);assert.equal(plot.style.filled,false);}
+ for(const item of panel.symbolLegends[0].items)assert.equal(item.mark.filled,false);
+ assert.match(out.tex,/mark=o,mark size=2.25bp/);
+ assert.doesNotMatch(out.tex,/mark=\*/);
+});
+test('Vega circle symbol size is squared diameter, not disk area',async()=>{
+ const out=await run({...base,mark:{type:'point',filled:true,size:144}});
+ assert.match(out.tex,/mark size=4.5bp/);
+});
+test('transparent constant fills do not become opaque black',async()=>{
+ const out=await run({...base,mark:{type:'point',fill:'transparent'}});
+ assert.equal(out.ir.panels[0].plots[0].style.fill,null);
+ await assert.rejects(run({...base,mark:{type:'point',fill:'rgba(0,0,0,0.5)'}}),/explicit opacity/);
 });

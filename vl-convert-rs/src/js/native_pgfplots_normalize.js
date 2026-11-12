@@ -131,13 +131,18 @@ globalThis.vlcPgfplotsNormalize = (() => {
       for(const key of ['axis','axisX','axisY','mark','line','point','circle','square','area','bar','rule','tick','text','errorbar','errorband','boxplot','legend'])delete c[key];
       if(c.view?.strokeWidth===0){c.view.stroke=null;delete c.view.strokeWidth;}
       if(c.view?.step!==undefined)delete c.view.step; // resolved per-view dimensions below
+      if(c.view?.stroke==='transparent' || c.view?.stroke==='none')c.view.stroke=null;
+      else if(typeof c.view?.stroke==='string')c.view.stroke=css(c.view.stroke,'config.view.stroke');
+      if(typeof c.background==='string')c.background=css(c.background,'config.background');
       return c;
     }
     function css(value,p) {
       if(value==null || value==='none')return value;
       if(typeof value!=='string')fail(p,'non-solid paint is unsupported');
       const rgb=vega.expressionFunction('rgb')(value);
+      if(rgb.opacity===0)return 'none';
       if(!Number.isFinite(rgb.r))fail(p,'invalid color');
+      if(rgb.opacity!==1)fail(p,'use explicit opacity for translucent constant paint');
       return rgb.formatHex();
     }
     async function unit(spec, rows, encoding, p) {
@@ -189,6 +194,13 @@ globalThis.vlcPgfplotsNormalize = (() => {
       const flow = ancestry(result.compiled,refs[0]);
       const values = result.tables.get(refs[0]);
       const compiledMark=terminal[0].mark;
+      // A datum uses a scale and a legend, unlike a literal color value.
+      if(enc.color && own(enc.color,'datum')) {
+        const key='__pgf_color_datum';
+        if(values.some(r=>own(r,key)))fail(p,'reserved datum field collision');
+        for(const row of values)row[key]=enc.color.datum;
+        enc.color={...enc.color,field:key};delete enc.color.datum;
+      }
       const update=compiledMark.encode?.update || {};
       const scaleFor=channel=>{
         const property=({color:m.filled===false||type==='line'?'stroke':'fill'})[channel]||channel;
@@ -207,13 +219,28 @@ globalThis.vlcPgfplotsNormalize = (() => {
           const visual=result.styles.get(refs[0])[i].find(x=>x.type===wanted);
           if(!visual)fail(p,'evaluated visual style cannot be mapped to a data row');
           values[i][key]=copy(visual.style);
-          for(const c of ['fill','stroke'])if(values[i][key][c]!=null && values[i][key][c]!=='none'){const color=vega.expressionFunction('rgb')(values[i][key][c]);if(!color)fail(p,'non-solid paint is unsupported');values[i][key][c]=color.formatHex();}
+          for(const c of ['fill','stroke']) {
+            const style=values[i][key];
+            if(style[c]==null || style[c]==='none')continue;
+            const color=vega.expressionFunction('rgb')(style[c]);
+            if(!color)fail(p,'non-solid paint is unsupported');
+            if(color.opacity===0){style[c]=null;continue;}
+            if(!Number.isFinite(color.r))fail(p,'invalid evaluated paint');
+            style[c]=color.formatHex();
+            style[c+'Opacity']=(style[c+'Opacity'] ?? 1)*color.opacity;
+          }
         }
         m._styleField=key;
         m._symbolLegends=[];
         for(const c of ['size','shape'])if(enc[c] && enc[c].legend!==null) {
           const scale=scaleFor(c);
-          if(scale)m._symbolLegends.push({title:enc[c].title || enc[c].field,items:scale.legendValues.map(v=>({label:v.value,mark:{[c]:v.mapped}}))});
+          if(scale) {
+            const sample=values[0]?.[key] || {};
+            const paint={};
+            for(const k of ['fill','stroke','fillOpacity','strokeOpacity','opacity','strokeWidth'])if(own(sample,k))paint[k]=sample[k];
+            paint.filled=sample.fill!=null && sample.fill!=='none';
+            m._symbolLegends.push({title:enc[c].title || enc[c].field,items:scale.legendValues.map(v=>({label:v.value,mark:{...paint,[c]:v.mapped}}))});
+          }
         }
         for(const c of styled)delete enc[c];
         if(m.color?.expr)delete m.color;

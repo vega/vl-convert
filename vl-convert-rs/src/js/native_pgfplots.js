@@ -33,6 +33,7 @@ globalThis.vlcNativePgfplots = (() => {
     if (!["string", "number", "boolean"].includes(typeof v)) fail("label", "expected text");
     if (String(v).length > 65536) fail("label", "label length limit exceeded");
     if (raw) return String(v);
+    if (/[\u{10000}-\u{10ffff}]/u.test(String(v))) fail("label", "non-BMP glyphs require a trusted TeX label; the standalone pdfLaTeX font cannot render them");
     const escapes = { "\\": "\\textbackslash{}", "{": "\\{", "}": "\\}", "$": "\\$", "&": "\\&", "#": "\\#", "%": "\\%", "_": "\\_", "^": "\\textasciicircum{}", "~": "\\textasciitilde{}" };
     const math = {α:"alpha",β:"beta",γ:"gamma",δ:"delta",ε:"epsilon",θ:"theta",λ:"lambda",μ:"mu",µ:"mu",π:"pi",σ:"sigma",φ:"phi",ω:"omega",Γ:"Gamma",Δ:"Delta",Θ:"Theta",Λ:"Lambda",Π:"Pi",Σ:"Sigma",Φ:"Phi",Ω:"Omega","±":"pm","×":"times","≤":"leq","≥":"geq","≠":"neq","∞":"infty"};
     return String(v).replace(/[\\{}$&#%_^~]/g, c => escapes[c]).replace(/[\r\n\t\u2028\u2029]/g, " ")
@@ -358,7 +359,7 @@ globalThis.vlcNativePgfplots = (() => {
   function series(unit) {
     const {enc, rows, mark: m, p} = unit;
     if (m.color !== undefined) color(m.color,p);
-    for(const k of ["fill","stroke"])if(m[k] !== undefined && m[k] !== null)color(m[k],p);
+    for(const k of ["fill","stroke"])if(m[k] !== undefined && m[k] !== null && m[k] !== "none")color(m[k],p);
     if (enc.opacity && !own(enc.opacity, "value")) fail(p, "only constant opacity encodings are supported");
     if (enc.opacity) m.opacity = number(enc.opacity.value, p, 0, 1);
     const c = enc.color;
@@ -811,6 +812,8 @@ globalThis.vlcNativePgfplots = (() => {
     if (a.axis.tickLabels && a.axis.labels !== false) {
       if (!a.axis.values || a.axis.tickLabels.length !== a.axis.values.length) fail(c, "tick labels must match tick values");
       parts.push(`${c}ticklabels={${a.axis.tickLabels.map(v => `{${label(v, opts.tex_labels)}}`).join(",")}}`);
+      // Custom/date labels already carry units; suppress numeric multipliers.
+      parts.push(`scaled ${c} ticks=false`);
     }
     if (a.axis.format) {
       const match = /^\.(\d{1,2})([fe])$/.exec(a.axis.format);
@@ -832,7 +835,7 @@ globalThis.vlcNativePgfplots = (() => {
   function pointStyle(s) {
     const mapping = {circle:s.filled?"*":"o",square:s.filled?"square*":"square",diamond:s.filled?"diamond*":"diamond","triangle-up":s.filled?"triangle*":"triangle","triangle-down":s.filled?"triangle*":"triangle","triangle-right":s.filled?"triangle*":"triangle","triangle-left":s.filled?"triangle*":"triangle",cross:"+",stroke:"-"};
     if (!own(mapping, s.shape)) fail("shape", "supported point shapes: circle, square, diamond, triangle-up, cross");
-    return [`mark=${mapping[s.shape]}`, `mark size=${bp(s.shape==="square"?Math.sqrt(s.size)/2:Math.sqrt(s.size / Math.PI))}`, `mark options={rotate=${({"triangle-down":180,"triangle-right":270,"triangle-left":90})[s.shape] || 0},draw=${texColor(s.stroke)},fill=${s.filled ? texColor(s.fill) : "none"},fill opacity=${fmt(s.opacity*s.fillOpacity)}}`];
+    return [`mark=${mapping[s.shape]}`, `mark size=${bp(Math.sqrt(s.size)/2)}`, `mark options={rotate=${({"triangle-down":180,"triangle-right":270,"triangle-left":90})[s.shape] || 0},draw=${texColor(s.stroke)},draw opacity=${fmt(s.stroke === null ? 0 : s.opacity*s.strokeOpacity)},fill=${s.filled ? texColor(s.fill) : "none"},fill opacity=${fmt(s.opacity*s.fillOpacity)}}`];
   }
   const coord = pt => pt == null ? "(nan,nan)" : `(${fmt(pt[0])},${fmt(pt[1])})`;
   function stepped(points, mode, horizontal, axes) {
