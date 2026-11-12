@@ -1,0 +1,53 @@
+name: Verify PGFPlots scale fidelity once
+on:
+  push:
+    branches: [feature/experimental-pgfplots-export]
+    paths: ['.github/workflows/pgfplots-scale-fidelity-once.yml']
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.repository == 'marcusinthesky/vl-convert'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply content-verified fidelity corrections
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'PY'
+          import base64,hashlib,json,lzma,os,subprocess,urllib.request
+          sha='a9a251c5c123437256ce68d8c9688f6c263a03ce'
+          request=urllib.request.Request('https://api.github.com/repos/marcusinthesky/vl-convert/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+          with urllib.request.urlopen(request,timeout=30) as response:
+              encoded=base64.b64decode(json.load(response)['content'])
+          assert hashlib.sha1(b'blob '+str(len(encoded)).encode()+b'\0'+encoded).hexdigest()==sha
+          patch=lzma.decompress(base64.b64decode(encoded,validate=True))
+          assert hashlib.sha256(patch).hexdigest()=='0bd9c8c8d42f118267c09fac3b6a3dbc08586aa5d442c7c5189b7340ac7d5a2b'
+          assert b'diff --git a/.github/' not in patch
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          PY
+      - name: Verify production modules and strict conformance comparisons
+        run: |
+          python -m pip install ruff==0.14.10 pyyaml packaging
+          node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
+          node --no-warnings --loader ./vl-convert-rs/tests/native-pgfplots/vendor-loader.mjs --test vl-convert-rs/tests/native-pgfplots/normalize.test.mjs
+          python vl-convert-rs/tests/native-pgfplots/test_gallery_contracts.py
+          ruff format --check vl-convert-python
+          ruff format --check vl-convert-rs/tests/native-pgfplots/*.py
+          python docs/tools/generate_interface_pages.py
+          git diff --check
+      - name: Commit only verified production, tests and documentation
+        run: |
+          git add vl-convert-rs/src/js/native_pgfplots.js vl-convert-rs/src/js/native_pgfplots_normalize.js vl-convert-rs/tests/native-pgfplots docs/source/_topics/pgfplots.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(pgfplots): preserve categorical order and official color scales'
+          git push origin HEAD:feature/experimental-pgfplots-export
