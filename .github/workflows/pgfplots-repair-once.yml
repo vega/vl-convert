@@ -28,8 +28,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('vl-convert-rs/src/js/native_pgfplots_normalize.js')
-          s=p.read_text()
+          p=Path('vl-convert-rs/src/js/native_pgfplots_normalize.js');s=p.read_text()
           old="const compiled = vl.compile({...spec, name:'__pgf_probe'}, {logger:log}).spec;"
           assert s.count(old)==1
           s=s.replace(old,"""// ARIA descriptions are browser-only. Vega-Lite builds them as expression
@@ -37,6 +36,9 @@ jobs:
                 // Disable only those probe descriptions, not the caller's labels/data.
                 const compiled = vl.compile({...spec, name:'__pgf_probe',
                   config:{...spec.config, aria:false}}, {logger:log}).spec;""")
+          old='const configs=defs.map(d=>d.axis).filter(a=>a!=null);'
+          assert s.count(old)==1
+          s=s.replace(old,'// Undefined means default axes, not hidden axes. Only explicit null hides.\n          const configs=defs.map(d=>d.axis).filter(a=>a!==null);')
           p.write_text(s)
           p=Path('vl-convert-rs/src/js/native_pgfplots.js');s=p.read_text()
           old=r'replace(/[\r\n\t]/g, " ")'
@@ -58,6 +60,17 @@ jobs:
            assert.ok(!out.tex.includes('\\input{secret}'));
            assert.ok(!/[\u2028\u2029]/.test(out.tex));
            assert.match((await run(base)).tex,/\\addplot/);
+          });
+          test('shared layered axes remain visible unless all layers explicitly hide them',async()=>{
+           const spec={data:base.data,layer:[{mark:'bar',encoding:base.encoding},{mark:'line',encoding:base.encoding}]};
+           let out=await run(spec);
+           for(const c of ['x','y'])assert.notEqual(out.ir.panels[0].axes[c].axis,null);
+           assert.doesNotMatch(out.tex,/axis [xy] line=none/);
+           for(const layer of spec.layer)layer.encoding=structuredClone(base.encoding);
+           spec.layer[0].encoding.x.axis=null;
+           out=await run(spec);assert.notEqual(out.ir.panels[0].axes.x.axis,null);
+           spec.layer[1].encoding.x.axis=null;
+           out=await run(spec);assert.equal(out.ir.panels[0].axes.x.axis,null);
           });
           ''')
           p=Path('vl-convert-python/tests/test_pgfplots.py');s=p.read_text()
@@ -97,8 +110,9 @@ jobs:
           prefix-key: v2-rust
           shared-key: native-${{ runner.os }}-${{ runner.arch }}
           cache-on-failure: true
-      - name: Verify the actual Rust and CLI interfaces
+      - name: Verify actual Rust and CLI interfaces with regenerated V8 archives
         run: |
+          cargo clean -p v8
           cargo test -p vl-convert-rs --test test_pgfplots -- --test-threads=1
           cargo test -p vl-convert --test test_pgfplots_cli -- --test-threads=1
       - name: Commit verified fixes and remove temporary maintenance workflows
@@ -107,5 +121,5 @@ jobs:
           git add vl-convert-python/src/pgfplots.rs vl-convert-python/tests/test_pgfplots.py vl-convert-python/vl_convert.pyi vl-convert-rs/src/js/native_pgfplots.js vl-convert-rs/src/js/native_pgfplots_normalize.js vl-convert-rs/tests/native-pgfplots/normalize.test.mjs
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(pgfplots): handle Unicode labels and validate Python version arguments'
+          git commit -m 'fix(pgfplots): preserve default axes and handle Unicode/version inputs'
           git push origin HEAD:feature/experimental-pgfplots-export
