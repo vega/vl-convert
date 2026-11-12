@@ -17,8 +17,12 @@ mod font_embed;
 mod html;
 mod image_loading;
 mod module_loader;
+mod pgfplots;
 pub(crate) mod svg_font;
 mod text;
+
+#[doc(inline)]
+pub use pgfplots::{PgfplotsOpts, PgfplotsOutput};
 
 #[macro_use]
 extern crate lazy_static;

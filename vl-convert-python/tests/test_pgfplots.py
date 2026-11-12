@@ -1,0 +1,137 @@
+"""Tests the built PyO3 extension, not a Python implementation of the backend."""
+
+import asyncio
+import json
+
+import pytest
+import vl_convert as vlc
+
+
+@pytest.fixture
+def spec():
+    return {
+        "data": {"values": [{"x": 1, "y": 2}, {"x": 2, "y": 4}]},
+        "mark": "line",
+        "encoding": {
+            "x": {"field": "x", "type": "quantitative"},
+            "y": {"field": "y", "type": "quantitative"},
+        },
+    }
+
+
+def test_native_axes_data_and_text(spec):
+    tex = vlc.vegalite_to_pgfplots(spec)
+    for text in (r"\begin{axis}", r"\addplot", "(1,2)", "(2,4)", "xlabel={x}"):
+        assert text in tex
+    for text in (r"\pgfpath", "includegraphics", "hide axis"):
+        assert text not in tex
+    assert tex == vlc.vegalite_to_pgfplots(json.dumps(spec))
+
+
+def test_standalone(spec):
+    tex = vlc.vegalite_to_pgfplots(spec, standalone=True)
+    assert tex.startswith(r"\documentclass")
+    assert tex.endswith("\\end{document}\n")
+
+
+def test_math_is_opt_in(spec):
+    spec["encoding"]["x"]["title"] = r"$E_{\mathrm{kin}}$"
+    escaped = vlc.vegalite_to_pgfplots(spec)
+    assert r"\$E\_\{" in escaped
+    trusted = vlc.vegalite_to_pgfplots(spec, tex_labels=True)
+    assert r"xlabel={$E_{\mathrm{kin}}$}" in trusted
+
+
+def test_async_matches_sync(spec):
+    import vl_convert.asyncio as avlc
+
+    async def run():
+        return await avlc.vegalite_to_pgfplots(spec)
+
+    assert asyncio.run(run()) == vlc.vegalite_to_pgfplots(spec)
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "not JSON",
+        {"marks": []},
+        {"mark": "line", "params": [{"name": "selection"}]},
+        {"mark": "line", "transform": [{"calculate": "1+1", "as": "x"}]},
+    ],
+)
+def test_unsupported_input_raises(invalid):
+    with pytest.raises(ValueError):
+        vlc.vegalite_to_pgfplots(invalid)
+
+
+def test_failure_does_not_poison_worker(spec):
+    with pytest.raises(ValueError):
+        vlc.vegalite_to_pgfplots({"mark": "geoshape"})
+    assert r"\addplot" in vlc.vegalite_to_pgfplots(spec)
+
+
+def test_official_window_transform(spec):
+    spec["transform"] = [
+        {
+            "window": [{"op": "mean", "field": "y", "as": "average"}],
+            "frame": [-1, 0],
+            "sort": [{"field": "x"}],
+        }
+    ]
+    spec["encoding"]["y"]["field"] = "average"
+    assert "(2,3)" in vlc.vegalite_to_pgfplots(spec)
+
+
+def test_bundled_version_selection(spec):
+    assert "\\addplot" in vlc.vegalite_to_pgfplots(spec, vl_version="v5_8")
+    with pytest.raises(ValueError, match="Unsupported Vega-Lite version"):
+        vlc.vegalite_to_pgfplots(spec, vl_version="not-a-version")
+
+
+def test_async_invalid_version_is_value_error(spec):
+    import vl_convert.asyncio as avlc
+
+    async def run():
+        with pytest.raises(ValueError, match="Unsupported Vega-Lite version"):
+            await avlc.vegalite_to_pgfplots(spec, vl_version="not-a-version")
+        assert r"\addplot" in await avlc.vegalite_to_pgfplots(spec)
+
+    asyncio.run(run())
+
+
+def test_quoted_unicode_title_remains_data(spec):
+    spec["encoding"]["x"]["title"] = (
+        "');globalThis.compromised=1;//\n\u2028\u2029\\input{secret}"
+    )
+    tex = vlc.vegalite_to_pgfplots(spec)
+    assert "textbackslash{}input" in tex
+    assert r"\input{secret}" not in tex
+    assert "\u2028" not in tex and "\u2029" not in tex
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_denied_data_access_raises_permission_error(tmp_path, spec, asynchronous):
+    import vl_convert.asyncio as avlc
+
+    source = tmp_path / "data.json"
+    source.write_text(json.dumps(spec["data"]["values"]), encoding="utf-8")
+    external = dict(spec, data={"url": source.resolve().as_uri()})
+    # Test access denial against an existing file on every platform, not
+    # the existence of /etc/passwd. Keep worker recovery covered too.
+    vlc.configure(allowed_base_urls=[])
+    try:
+        if asynchronous:
+
+            async def run():
+                with pytest.raises(PermissionError, match="VLC_ACCESS_DENIED"):
+                    await avlc.vegalite_to_pgfplots(external)
+                assert r"\addplot" in await avlc.vegalite_to_pgfplots(spec)
+
+            asyncio.run(run())
+        else:
+            with pytest.raises(PermissionError, match="VLC_ACCESS_DENIED"):
+                vlc.vegalite_to_pgfplots(external)
+            assert r"\addplot" in vlc.vegalite_to_pgfplots(spec)
+    finally:
+        vlc.configure(allowed_base_urls=None)
