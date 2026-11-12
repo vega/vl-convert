@@ -70,3 +70,27 @@ test('interaction rejection happens before any resource access',async()=>{
 test('unsupported free JavaScript is rejected by Vega expression parsing',async()=>{
  await assert.rejects(run({...base,transform:[{calculate:'globalThis.process.exit()',as:'bad'}]}));
 });
+
+test('quoted labels and Unicode separators stay data, not generated expressions',async()=>{
+ const title="');globalThis.compromised=1;//\n\u2028\u2029\\input{secret}";
+ const input=structuredClone(base);input.encoding.x.title=title;
+ const before=JSON.stringify(input);
+ const out=await run(input);
+ assert.equal(JSON.stringify(input),before);
+ assert.equal(globalThis.compromised,undefined);
+ assert.ok(out.tex.includes('textbackslash{}input'));
+ assert.ok(!out.tex.includes('\\input{secret}'));
+ assert.ok(!/[\u2028\u2029]/.test(out.tex));
+ assert.match((await run(base)).tex,/\\addplot/);
+});
+test('shared layered axes remain visible unless all layers explicitly hide them',async()=>{
+ const spec={data:base.data,layer:[{mark:'bar',encoding:base.encoding},{mark:'line',encoding:base.encoding}]};
+ let out=await run(spec);
+ for(const c of ['x','y'])assert.notEqual(out.ir.panels[0].axes[c].axis,null);
+ assert.doesNotMatch(out.tex,/axis [xy] line=none/);
+ for(const layer of spec.layer)layer.encoding=structuredClone(base.encoding);
+ spec.layer[0].encoding.x.axis=null;
+ out=await run(spec);assert.notEqual(out.ir.panels[0].axes.x.axis,null);
+ spec.layer[1].encoding.x.axis=null;
+ out=await run(spec);assert.equal(out.ir.panels[0].axes.x.axis,null);
+});

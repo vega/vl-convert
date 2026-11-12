@@ -25,7 +25,8 @@ pub fn vegalite_to_pgfplots(
     let spec = parse_spec_to_value_or_string(vl_spec)?;
     let version = vl_version
         .map(VlVersion::from_str)
-        .transpose()?
+        .transpose()
+        .map_err(|err| pyo3::exceptions::PyValueError::new_err(err.to_string()))?
         .unwrap_or_default();
     let opts = PgfplotsOpts {
         standalone,
@@ -53,7 +54,8 @@ pub fn vegalite_to_pgfplots_asyncio<'py>(
     let spec = parse_spec_to_value_or_string(vl_spec)?;
     let version = vl_version
         .map(VlVersion::from_str)
-        .transpose()?
+        .transpose()
+        .map_err(|err| pyo3::exceptions::PyValueError::new_err(err.to_string()))?
         .unwrap_or_default();
     let opts = PgfplotsOpts {
         standalone,

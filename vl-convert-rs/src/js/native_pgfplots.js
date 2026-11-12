@@ -35,7 +35,7 @@ globalThis.vlcNativePgfplots = (() => {
     if (raw) return String(v);
     const escapes = { "\\": "\\textbackslash{}", "{": "\\{", "}": "\\}", "$": "\\$", "&": "\\&", "#": "\\#", "%": "\\%", "_": "\\_", "^": "\\textasciicircum{}", "~": "\\textasciitilde{}" };
     const math = {α:"alpha",β:"beta",γ:"gamma",δ:"delta",ε:"epsilon",θ:"theta",λ:"lambda",μ:"mu",µ:"mu",π:"pi",σ:"sigma",φ:"phi",ω:"omega",Γ:"Gamma",Δ:"Delta",Θ:"Theta",Λ:"Lambda",Π:"Pi",Σ:"Sigma",Φ:"Phi",Ω:"Omega","±":"pm","×":"times","≤":"leq","≥":"geq","≠":"neq","∞":"infty"};
-    return String(v).replace(/[\\{}$&#%_^~]/g, c => escapes[c]).replace(/[\r\n\t]/g, " ")
+    return String(v).replace(/[\\{}$&#%_^~]/g, c => escapes[c]).replace(/[\r\n\t\u2028\u2029]/g, " ")
       .replace(/[αβγδεθλμµπσφωΓΔΘΛΠΣΦΩ±×≤≥≠∞]/g,c=>`\\ensuremath{\\${math[c]}}`).replace(/−/g,"-");
   }
   function color(value, p) {

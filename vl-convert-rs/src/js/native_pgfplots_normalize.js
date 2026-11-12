@@ -79,7 +79,11 @@ globalThis.vlcPgfplotsNormalize = (() => {
       const log = vega.logger(vega.Warn);
       log.error = (...x) => { errors.push(x.map(String).join(' ')); return log; };
       log.warn = (...x) => { warn(x.map(String).join(' ')); return log; };
-      const compiled = vl.compile({...spec, name:'__pgf_probe'}, {logger:log}).spec;
+      // ARIA descriptions are browser-only. Vega-Lite builds them as expression
+      // strings from labels; literal U+2028/U+2029 can break Vega's parser.
+      // Disable only those probe descriptions, not the caller's labels/data.
+      const compiled = vl.compile({...spec, name:'__pgf_probe',
+        config:{...spec.config, aria:false}}, {logger:log}).spec;
       const baseLoader=loader || denyLoader, guardedLoader=Object.create(baseLoader);
       guardedLoader.load=async (...args)=>{try{return await baseLoader.load(...args);}catch(error){errors.push(String(error.message || error));throw error;}};
       const runtime = new vega.View(vega.parse(compiled), {renderer:'none', loader:guardedLoader, logger:log});
@@ -364,7 +368,8 @@ globalThis.vlcPgfplotsNormalize = (() => {
           const domains=defs.flatMap(d=>d.scale?.domain||[]);
           const domain=settings.domain || (domains.length?(numeric?[Math.min(...domains),Math.max(...domains)]:[...new Set(domains)]):undefined);
           for(const d of defs)d.scale={...settings,...(domain?{domain}:{}),...(defs[0]?.scale?.type?{type:defs[0].scale.type}:{})};
-          const configs=defs.map(d=>d.axis).filter(a=>a!=null);
+          // Undefined means default axes, not hidden axes. Only explicit null hides.
+          const configs=defs.map(d=>d.axis).filter(a=>a!==null);
           const merged=Object.assign({},...configs);
           for(const d of defs)d.axis=configs.length?merged:null;
         }

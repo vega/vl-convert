@@ -1,4 +1,5 @@
 """Tests the built PyO3 extension, not a Python implementation of the backend."""
+
 import asyncio
 import json
 
@@ -50,13 +51,16 @@ def test_async_matches_sync(spec):
     assert asyncio.run(run()) == vlc.vegalite_to_pgfplots(spec)
 
 
-@pytest.mark.parametrize("invalid", [
-    "not JSON",
-    {"marks": []},
-    {"mark": "line", "data": {"url": "file:///etc/passwd"}},
-    {"mark": "line", "params": [{"name": "selection"}]},
-    {"mark": "line", "transform": [{"calculate": "1+1", "as": "x"}]},
-])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "not JSON",
+        {"marks": []},
+        {"mark": "line", "data": {"url": "file:///etc/passwd"}},
+        {"mark": "line", "params": [{"name": "selection"}]},
+        {"mark": "line", "transform": [{"calculate": "1+1", "as": "x"}]},
+    ],
+)
 def test_unsupported_input_raises(invalid):
     with pytest.raises(ValueError):
         vlc.vegalite_to_pgfplots(invalid)
@@ -69,12 +73,39 @@ def test_failure_does_not_poison_worker(spec):
 
 
 def test_official_window_transform(spec):
-    spec["transform"] = [{"window": [{"op": "mean", "field": "y", "as": "average"}], "frame": [-1, 0], "sort": [{"field": "x"}]}]
+    spec["transform"] = [
+        {
+            "window": [{"op": "mean", "field": "y", "as": "average"}],
+            "frame": [-1, 0],
+            "sort": [{"field": "x"}],
+        }
+    ]
     spec["encoding"]["y"]["field"] = "average"
     assert "(2,3)" in vlc.vegalite_to_pgfplots(spec)
 
 
 def test_bundled_version_selection(spec):
     assert "\\addplot" in vlc.vegalite_to_pgfplots(spec, vl_version="v5_8")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unsupported Vega-Lite version"):
         vlc.vegalite_to_pgfplots(spec, vl_version="not-a-version")
+
+
+def test_async_invalid_version_is_value_error(spec):
+    import vl_convert.asyncio as avlc
+
+    async def run():
+        with pytest.raises(ValueError, match="Unsupported Vega-Lite version"):
+            await avlc.vegalite_to_pgfplots(spec, vl_version="not-a-version")
+        assert r"\addplot" in await avlc.vegalite_to_pgfplots(spec)
+
+    asyncio.run(run())
+
+
+def test_quoted_unicode_title_remains_data(spec):
+    spec["encoding"]["x"]["title"] = (
+        "');globalThis.compromised=1;//\n\u2028\u2029\\input{secret}"
+    )
+    tex = vlc.vegalite_to_pgfplots(spec)
+    assert "textbackslash{}input" in tex
+    assert r"\input{secret}" not in tex
+    assert "\u2028" not in tex and "\u2029" not in tex
