@@ -21,3 +21,4 @@ pythonize = { workspace = true }
 tokio = { workspace = true }
 pyo3-async-runtimes = { workspace = true }
 pyo3-log = { workspace = true }
+log = { workspace = true }
